@@ -7,7 +7,15 @@ import System.IO
 
 main :: IO ()
 main = do
-    printKafkaProperties
+    kConf <- newKafkaConf
+    conf <- dumpKafkaConf kConf
+    print conf
+
+    kTopicConf <- newKafkaTopicConf
+    tConf <- dumpKafkaTopicConf kTopicConf
+    print tConf
+
+    -- hPrintKafkaProperties stdout
     --o <- c_stdout
     --rdKafkaConfPropertiesShow o
     --putStrLn $ "Kafka version: " ++ rdKafkaVersionStr
