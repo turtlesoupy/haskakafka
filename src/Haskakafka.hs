@@ -10,6 +10,7 @@ module Haskakafka
  , dumpKafkaConf
  , newKafkaTopicConf
  , newKafka
+ , newKafkaTopic
  , dumpKafkaTopicConf
  , addBrokers
  , module Haskakafka.InternalEnum
@@ -29,7 +30,9 @@ import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-data KafkaException = KafkaBadSpecification String
+data KafkaException = 
+    KafkaError String
+  | KafkaBadSpecification String
     deriving (Show, Typeable)
 
 instance Exception KafkaException
@@ -37,6 +40,7 @@ instance Exception KafkaException
 type KafkaType = RdKafkaTypeT
 
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
+data KafkaTopic = KafkaTopic { kafkaTopicPtr :: RdKafkaTopicTPtr }
 data KafkaConf = KafkaConf {kafkaConfPtr :: RdKafkaConfTPtr}
 data KafkaTopicConf = KafkaTopicConf {kafkaTopicConfPtr :: RdKafkaTopicConfTPtr}
 
@@ -58,6 +62,13 @@ newKafka kafkaType (KafkaConf confPtr) = do
     case et of 
         Left e -> error e
         Right x -> return $ Kafka x
+
+newKafkaTopic :: Kafka -> String -> KafkaTopicConf -> IO (KafkaTopic)
+newKafkaTopic (Kafka kafkaPtr) topicName (KafkaTopicConf confPtr) = do
+    et <- newRdKafkaTopicT kafkaPtr topicName confPtr
+    case et of 
+        Left e -> throw $ KafkaError e
+        Right x -> return $ KafkaTopic x
 
 addBrokers :: Kafka -> String -> IO ()
 addBrokers (Kafka kptr) brokerStr = do

@@ -4,6 +4,7 @@
 module Haskakafka.Internal where
 
 import Foreign
+import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
 import System.IO
@@ -25,11 +26,21 @@ type CCharBufPointer  = Ptr CChar
 
 {#fun pure unsafe rd_kafka_version as ^
     {} -> `Int' #}
+
 {#fun pure unsafe rd_kafka_version_str as ^
     {} -> `String' #}
 
 {#fun pure unsafe rd_kafka_err2str as ^
     {enumToCInt `RdKafkaRespErrT'} -> `String' #}
+
+{#fun pure unsafe rd_kafka_errno2err as ^
+    {`Int'} -> `RdKafkaRespErrT' cIntToEnum #}
+
+
+kafkaErrnoString :: IO (String)
+kafkaErrnoString = do
+    (Errno num) <- getErrno 
+    return $ rdKafkaErr2str $ rdKafkaErrno2err (fromIntegral num)
 
 -- Move where approperiate
 
@@ -65,6 +76,8 @@ data RdKafkaTopicConfT
 {#pointer *rd_kafka_topic_conf_t as RdKafkaTopicConfTPtr foreign -> RdKafkaTopicConfT #} 
 {#fun unsafe rd_kafka_topic_conf_new as ^
     {} -> `RdKafkaTopicConfTPtr' #}
+{#fun unsafe rd_kafka_topic_conf_dup as ^
+    {`RdKafkaTopicConfTPtr'} -> `RdKafkaTopicConfTPtr' #}
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
     rdKafkaTopicConfDestroy :: FunPtr (Ptr RdKafkaTopicConfT -> IO ())
@@ -106,6 +119,25 @@ newRdKafkaT kafkaType confPtr =
 
 {#fun unsafe rd_kafka_dump as ^
     {`CFilePtr', `RdKafkaTPtr'} -> `()' #}
+
+data RdKafkaTopicT
+{#pointer *rd_kafka_topic_t as RdKafkaTopicTPtr foreign -> RdKafkaTopicT #}
+{#fun unsafe rd_kafka_topic_new as ^
+    {`RdKafkaTPtr', `String', `RdKafkaTopicConfTPtr'} -> `RdKafkaTopicTPtr' #}
+
+foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_destroy"
+    rdKafkaTopicDestroy :: FunPtr (Ptr RdKafkaTopicT -> IO ())
+
+newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
+newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
+    duper <- rdKafkaTopicConfDup topicConfPtr
+    ret <- rdKafkaTopicNew kafkaPtr topic duper
+    withForeignPtr ret $ \realPtr ->
+        if realPtr == nullPtr then kafkaErrnoString >>= return . Left
+        else do
+            addForeignPtrFinalizer rdKafkaTopicDestroy ret
+            return $ Right ret
+
 
 -- Marshall / Unmarshall
 enumToCInt :: Enum a => a -> CInt

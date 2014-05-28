@@ -18,6 +18,9 @@ main = do
     kafka <- newKafka RdKafkaConsumer kConf
     hPrintKafka stderr kafka
     addBrokers kafka "localhost:9092"
+    hPrintKafka stderr kafka
+    topic <- newKafkaTopic kafka "topic" kTopicConf
+    hPrintKafka stderr kafka
 
     -- hPrintKafkaProperties stdout
     --o <- c_stdout
