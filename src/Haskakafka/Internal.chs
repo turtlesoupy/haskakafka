@@ -10,6 +10,8 @@ import System.IO
 import System.Posix.IO
 import System.Posix.Types
 
+import Haskakafka.InternalEnum
+
 import qualified Data.Map.Strict as Map
 
 #include "rdkafka.h"
@@ -40,6 +42,9 @@ data RdKafkaConfT
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
     rdKafkaConfDestroy :: FunPtr (Ptr RdKafkaConfT -> IO ())
+
+{#fun unsafe rd_kafka_conf_dup as ^
+    {`RdKafkaConfTPtr'} -> `RdKafkaConfTPtr' #}
 
 newRdKafkaConfT :: IO RdKafkaConfTPtr
 newRdKafkaConfT = do
@@ -88,7 +93,8 @@ nErrorBytes = 1024 * 8
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr = 
     allocaBytes nErrorBytes $ \charPtr -> do
-        ret <- rdKafkaNew kafkaType confPtr charPtr (fromIntegral nErrorBytes)
+        duper <- rdKafkaConfDup confPtr
+        ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
             else do
@@ -100,12 +106,6 @@ newRdKafkaT kafkaType confPtr =
 
 {#fun unsafe rd_kafka_dump as ^
     {`CFilePtr', `RdKafkaTPtr'} -> `()' #}
-
--- Enum zone
-    
-{#enum rd_kafka_type_t as ^ {underscoreToCase} deriving (Show, Eq) #}
-{#enum rd_kafka_conf_res_t as ^ {underscoreToCase} deriving (Show, Eq) #}
-{#enum rd_kafka_resp_err_t as ^ {underscoreToCase} deriving (Show, Eq) #}
 
 -- Marshall / Unmarshall
 enumToCInt :: Enum a => a -> CInt

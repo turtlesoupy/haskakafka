@@ -15,6 +15,10 @@ main = do
     tConf <- dumpKafkaTopicConf kTopicConf
     print tConf
 
+    kafka <- newKafka RdKafkaConsumer kConf
+    hPrintKafka stderr kafka
+    addBrokers kafka "localhost:9092"
+
     -- hPrintKafkaProperties stdout
     --o <- c_stdout
     --rdKafkaConfPropertiesShow o

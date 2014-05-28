@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+
 module Haskakafka 
 (  Kafka
  , KafkaConf
@@ -7,7 +9,10 @@ module Haskakafka
  , newKafkaConf
  , dumpKafkaConf
  , newKafkaTopicConf
+ , newKafka
  , dumpKafkaTopicConf
+ , addBrokers
+ , module Haskakafka.InternalEnum
 ) where
 
 import Foreign
@@ -16,9 +21,20 @@ import Foreign.Marshal.Alloc
 import Foreign.Storable
 import Foreign.C.String
 import Haskakafka.Internal
+import Haskakafka.InternalEnum
 import System.IO
+import Control.Monad
+import Control.Exception
+import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+
+data KafkaException = KafkaBadSpecification String
+    deriving (Show, Typeable)
+
+instance Exception KafkaException
+
+type KafkaType = RdKafkaTypeT
 
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
 data KafkaConf = KafkaConf {kafkaConfPtr :: RdKafkaConfTPtr}
@@ -35,6 +51,19 @@ newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
 
 newKafkaConf :: IO KafkaConf
 newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
+
+newKafka :: KafkaType -> KafkaConf -> IO Kafka
+newKafka kafkaType (KafkaConf confPtr) = do
+    et <- newRdKafkaT kafkaType confPtr 
+    case et of 
+        Left e -> error e
+        Right x -> return $ Kafka x
+
+addBrokers :: Kafka -> String -> IO ()
+addBrokers (Kafka kptr) brokerStr = do
+    numBrokers <- rdKafkaBrokersAdd kptr brokerStr
+    when (numBrokers == 0) 
+        (throw $ KafkaBadSpecification "No valid brokers specified")
 
 dumpKafkaTopicConf :: KafkaTopicConf -> IO (Map String String)
 dumpKafkaTopicConf (KafkaTopicConf kptr) = 
