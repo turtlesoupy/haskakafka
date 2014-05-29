@@ -13,6 +13,9 @@ module Haskakafka
  , newKafkaTopic
  , dumpKafkaTopicConf
  , addBrokers
+ , startConsuming
+ , consumeMessage
+ , stopConsuming
  , module Haskakafka.InternalEnum
 ) where
 
@@ -30,12 +33,14 @@ import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 
-data KafkaException = 
+data KafkaError = 
     KafkaError String
+  | KafkaTimedOut
+  | KafkaUnknownTopicPartition
   | KafkaBadSpecification String
     deriving (Show, Typeable)
 
-instance Exception KafkaException
+instance Exception KafkaError
 
 type KafkaType = RdKafkaTypeT
 
@@ -75,6 +80,33 @@ addBrokers (Kafka kptr) brokerStr = do
     numBrokers <- rdKafkaBrokersAdd kptr brokerStr
     when (numBrokers == 0) 
         (throw $ KafkaBadSpecification "No valid brokers specified")
+
+startConsuming :: KafkaTopic -> Int -> Int64 -> IO ()
+startConsuming (KafkaTopic topicPtr) partition offset = 
+    throwOnError $ rdKafkaConsumeStart topicPtr partition offset
+
+consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError String)
+consumeMessage (KafkaTopic topicPtr) partition timeout = do
+    ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
+    withForeignPtr ptr $ \realPtr ->
+        if realPtr == nullPtr then kafkaErrnoString >>= return . Left . KafkaError
+        else do
+            addForeignPtrFinalizer rdKafkaMessageDestroy ptr
+            s <- peek realPtr
+            print s
+            return $ Right "ABC"
+
+stopConsuming :: KafkaTopic -> Int -> IO ()
+stopConsuming (KafkaTopic topicPtr) partition = 
+    throwOnError $ rdKafkaConsumeStop topicPtr partition
+
+throwOnError :: IO (Maybe String) -> IO ()
+throwOnError action = do
+    m <- action
+    case m of 
+        Just e -> throw $ KafkaError e
+        Nothing -> return ()
+
 
 dumpKafkaTopicConf :: KafkaTopicConf -> IO (Map String String)
 dumpKafkaTopicConf (KafkaTopicConf kptr) = 

@@ -9,18 +9,18 @@ main :: IO ()
 main = do
     kConf <- newKafkaConf
     conf <- dumpKafkaConf kConf
-    print conf
 
     kTopicConf <- newKafkaTopicConf
     tConf <- dumpKafkaTopicConf kTopicConf
-    print tConf
 
     kafka <- newKafka RdKafkaConsumer kConf
-    hPrintKafka stderr kafka
     addBrokers kafka "localhost:9092"
-    hPrintKafka stderr kafka
     topic <- newKafkaTopic kafka "topic" kTopicConf
-    hPrintKafka stderr kafka
+
+    startConsuming topic 0 0
+    m <- consumeMessage topic 0 1000
+    print m
+    stopConsuming topic 0
 
     -- hPrintKafkaProperties stdout
     --o <- c_stdout
