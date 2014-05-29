@@ -2,11 +2,12 @@
 
 module Haskakafka 
 (  Kafka
- , KafkaOffset(..)
- , KafkaType(..)
- , KafkaMessage(..)
  , KafkaConf
+ , KafkaMessage(..)
+ , KafkaOffset(..)
+ , KafkaTopic
  , KafkaTopicConf
+ , KafkaType(..)
  , hPrintKafkaProperties
  , hPrintKafka
  , newKafkaConf
