@@ -3,7 +3,8 @@
 module Haskakafka 
 (  Kafka
  , KafkaOffset(..)
- , KafkaMessage
+ , KafkaType(..)
+ , KafkaMessage(..)
  , KafkaConf
  , KafkaTopicConf
  , hPrintKafkaProperties
@@ -18,7 +19,6 @@ module Haskakafka
  , startConsuming
  , consumeMessage
  , stopConsuming
- , module Haskakafka.InternalEnum
 ) where
 
 import Foreign
@@ -26,8 +26,8 @@ import Foreign.ForeignPtr
 import Foreign.Marshal.Alloc
 import Foreign.Storable
 import Foreign.C.String
+import Foreign.C.Error
 import Haskakafka.Internal
-import Haskakafka.InternalEnum
 import System.IO
 import Control.Monad
 import Control.Exception
@@ -60,8 +60,7 @@ data KafkaOffset = KafkaOffsetBeginning
 
 instance Exception KafkaError
 
-type KafkaType = RdKafkaTypeT
-
+data KafkaType = KafkaConsumer -- Producers not supported yet
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
 data KafkaTopic = KafkaTopic { kafkaTopicPtr :: RdKafkaTopicTPtr }
 data KafkaConf = KafkaConf {kafkaConfPtr :: RdKafkaConfTPtr}
@@ -81,7 +80,7 @@ newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
 
 newKafka :: KafkaType -> KafkaConf -> IO Kafka
 newKafka kafkaType (KafkaConf confPtr) = do
-    et <- newRdKafkaT kafkaType confPtr 
+    et <- newRdKafkaT RdKafkaConsumer confPtr 
     case et of 
         Left e -> error e
         Right x -> return $ Kafka x
@@ -118,20 +117,28 @@ consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage
 consumeMessage (KafkaTopic topicPtr) partition timeout = do
     ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
     withForeignPtr ptr $ \realPtr ->
-        if realPtr == nullPtr then kafkaErrnoString >>= return . Left . KafkaError
+        if realPtr == nullPtr then getErrno >>= return . Left . closestKafkaError
         else do
             addForeignPtrFinalizer rdKafkaMessageDestroy ptr
             s <- peek realPtr
-            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+            if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaError $ rdKafkaErr2str $ err'RdKafkaMessageT s
+            else do
+                payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
 
-            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
-                   else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
+                key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+                       else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
 
-            return $ Right $ KafkaMessage
-                (partition'RdKafkaMessageT s) 
-                (offset'RdKafkaMessageT s)
-                payload
-                key 
+                return $ Right $ KafkaMessage
+                    (partition'RdKafkaMessageT s) 
+                    (offset'RdKafkaMessageT s)
+                    payload
+                    key 
+
+closestKafkaError :: Errno -> KafkaError
+closestKafkaError e@(Errno num)
+    | e == eNOENT = KafkaUnknownTopicPartition
+    | e == eTIMEDOUT = KafkaTimedOut
+    | otherwise = KafkaError $ rdKafkaErr2str $ rdKafkaErrno2err (fromIntegral num) 
 
 stopConsuming :: KafkaTopic -> Int -> IO ()
 stopConsuming (KafkaTopic topicPtr) partition = 
@@ -166,5 +173,5 @@ parseDump cstr = alloca $ \sizeptr -> do
 
 listToTuple :: [String] -> [(String, String)]
 listToTuple [] = []
-listToTuple _ = error "list to tuple can only be called on even length lists"
 listToTuple (k:v:t) = (k, v) : listToTuple t
+listToTuple _ = error "list to tuple can only be called on even length lists"

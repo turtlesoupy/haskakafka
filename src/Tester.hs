@@ -1,7 +1,6 @@
 module Main (main) where
 
 import Haskakafka
-import Haskakafka.Internal
 
 import System.IO
 
@@ -13,11 +12,11 @@ main = do
     kTopicConf <- newKafkaTopicConf
     tConf <- dumpKafkaTopicConf kTopicConf
 
-    kafka <- newKafka RdKafkaConsumer kConf
+    kafka <- newKafka KafkaConsumer kConf
     addBrokers kafka "localhost:9092"
     topic <- newKafkaTopic kafka "test" kTopicConf
 
-    startConsuming topic 0 KafkaOffsetBeginning
+    startConsuming topic 0 (KafkaOffset 100)
     m <- consumeMessage topic 0 1000
     print m
     m <- consumeMessage topic 0 1000
