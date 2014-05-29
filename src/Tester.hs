@@ -2,26 +2,45 @@ module Main (main) where
 
 import Haskakafka
 
+import Control.Monad
 import System.IO
+
+import qualified Data.ByteString.Char8 as BS
+
+doConsume :: IO ()
+doConsume = do
+    kConf <- newKafkaConf
+    kafka <- newKafka KafkaConsumer kConf
+    addBrokers kafka "localhost:9092"
+    kTopicConf <- newKafkaTopicConf
+    topic <- newKafkaTopic kafka "test" kTopicConf
+
+    startConsuming topic 0 (KafkaOffsetBeginning)
+    forever $ do
+        m <- consumeMessage topic 0 (1000 * 1000)
+        print m
+    stopConsuming topic 0
+
+doProduce :: IO ()
+doProduce = do
+    kConf <- newKafkaConf
+    kafka <- newKafka KafkaProducer kConf
+    addBrokers kafka "localhost:9092"
+    kTopicConf <- newKafkaTopicConf
+    topic <- newKafkaTopic kafka "test" kTopicConf
+    let me = KafkaMessage 0 0 (BS.pack "hi") Nothing
+    err <- produceMessage topic me
+
+    drainOutQueue kafka
+            
+    print err
+
 
 main :: IO ()
 main = do
-    kConf <- newKafkaConf
-    conf <- dumpKafkaConf kConf
+    -- doProduce
+    doConsume
 
-    kTopicConf <- newKafkaTopicConf
-    tConf <- dumpKafkaTopicConf kTopicConf
-
-    kafka <- newKafka KafkaConsumer kConf
-    addBrokers kafka "localhost:9092"
-    topic <- newKafkaTopic kafka "test" kTopicConf
-
-    startConsuming topic 0 (KafkaOffset 100)
-    m <- consumeMessage topic 0 1000
-    print m
-    m <- consumeMessage topic 0 1000
-    print m
-    stopConsuming topic 0
 
     -- hPrintKafkaProperties stdout
     --o <- c_stdout

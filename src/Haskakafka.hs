@@ -19,6 +19,9 @@ module Haskakafka
  , startConsuming
  , consumeMessage
  , stopConsuming
+ , produceMessage
+ , pollEvents
+ , drainOutQueue
 ) where
 
 import Foreign
@@ -39,9 +42,11 @@ import qualified Data.ByteString.Internal as BSI
 
 data KafkaError = 
     KafkaError String
-  | KafkaTimedOut
-  | KafkaUnknownTopicPartition
+  | KafkaInvalidReturnValue
   | KafkaBadSpecification String
+  | KafkaTimedOut
+  | KafkaResponseError RdKafkaRespErrT
+  | KafkaUnknownTopicPartition
     deriving (Show, Typeable)
 
 
@@ -60,11 +65,15 @@ data KafkaOffset = KafkaOffsetBeginning
 
 instance Exception KafkaError
 
-data KafkaType = KafkaConsumer -- Producers not supported yet
+data KafkaType = KafkaConsumer | KafkaProducer
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
 data KafkaTopic = KafkaTopic { kafkaTopicPtr :: RdKafkaTopicTPtr }
 data KafkaConf = KafkaConf {kafkaConfPtr :: RdKafkaConfTPtr}
 data KafkaTopicConf = KafkaTopicConf {kafkaTopicConfPtr :: RdKafkaTopicConfTPtr}
+
+kafkaTypeToRdKafkaType :: KafkaType -> RdKafkaTypeT
+kafkaTypeToRdKafkaType KafkaConsumer = RdKafkaConsumer
+kafkaTypeToRdKafkaType KafkaProducer = RdKafkaProducer
 
 hPrintKafkaProperties :: Handle -> IO ()
 hPrintKafkaProperties h = handleToCFile h "w" >>= rdKafkaConfPropertiesShow
@@ -80,7 +89,7 @@ newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
 
 newKafka :: KafkaType -> KafkaConf -> IO Kafka
 newKafka kafkaType (KafkaConf confPtr) = do
-    et <- newRdKafkaT RdKafkaConsumer confPtr 
+    et <- newRdKafkaT (kafkaTypeToRdKafkaType kafkaType) confPtr 
     case et of 
         Left e -> error e
         Right x -> return $ Kafka x
@@ -117,7 +126,7 @@ consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage
 consumeMessage (KafkaTopic topicPtr) partition timeout = do
     ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
     withForeignPtr ptr $ \realPtr ->
-        if realPtr == nullPtr then getErrno >>= return . Left . closestKafkaError
+        if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr 
         else do
             addForeignPtrFinalizer rdKafkaMessageDestroy ptr
             s <- peek realPtr
@@ -134,11 +143,38 @@ consumeMessage (KafkaTopic topicPtr) partition timeout = do
                     payload
                     key 
 
-closestKafkaError :: Errno -> KafkaError
-closestKafkaError e@(Errno num)
-    | e == eNOENT = KafkaUnknownTopicPartition
-    | e == eTIMEDOUT = KafkaTimedOut
-    | otherwise = KafkaError $ rdKafkaErr2str $ rdKafkaErrno2err (fromIntegral num) 
+produceMessage :: KafkaTopic -> KafkaMessage -> IO (Maybe KafkaError)
+produceMessage (KafkaTopic topicPtr) km = do
+    let msgFlags = rdKafkaMsgFlagCopy
+        (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr (messagePayload km)
+
+    withForeignPtr payloadFPtr $ \payloadPtr -> do
+        let passedPayload = payloadPtr `plusPtr` payloadOffset
+        
+        err <- rdKafkaProduce topicPtr (fromIntegral $ messagePartition km)
+                msgFlags passedPayload (fromIntegral payloadLength)
+                nullPtr (fromIntegral 0) nullPtr
+
+        case err of
+            -1 -> getErrno >>= return . Just . kafkaRespErr 
+            0 -> return Nothing
+            _ -> return $ Just $ KafkaInvalidReturnValue
+
+pollEvents :: Kafka -> Int -> IO ()
+pollEvents (Kafka kPtr) timeout = rdKafkaPoll kPtr timeout >> return ()
+
+outboundQueueLength :: Kafka -> IO (Int)
+outboundQueueLength (Kafka kPtr) = rdKafkaOutqLen kPtr
+
+drainOutQueue :: Kafka -> IO ()
+drainOutQueue k = do
+    pollEvents k 100
+    l <- outboundQueueLength k
+    if l == 0 then return ()
+    else drainOutQueue k
+
+kafkaRespErr :: Errno -> KafkaError
+kafkaRespErr (Errno num) = KafkaResponseError $ rdKafkaErrno2err (fromIntegral num)
 
 stopConsuming :: KafkaTopic -> Int -> IO ()
 stopConsuming (KafkaTopic topicPtr) partition = 

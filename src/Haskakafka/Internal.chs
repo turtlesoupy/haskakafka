@@ -31,6 +31,12 @@ type CCharBufPointer  = Ptr CChar
 {#enum rd_kafka_conf_res_t as ^ {underscoreToCase} deriving (Show, Eq) #}
 {#enum rd_kafka_resp_err_t as ^ {underscoreToCase} deriving (Show, Eq) #}
 
+type RdKafkaMsgFlag = Int
+rdKafkaMsgFlagFree :: RdKafkaMsgFlag
+rdKafkaMsgFlagFree = 0x1
+rdKafkaMsgFlagCopy :: RdKafkaMsgFlag
+rdKafkaMsgFlagCopy = 0x2
+
 -- Helper functions
 {#fun pure unsafe rd_kafka_version as ^
     {} -> `Int' #}
@@ -181,6 +187,18 @@ rdKafkaConsumeStop topicPtr partition = do
     case i of 
         -1 -> kafkaErrnoString >>= return . Just
         _ -> return Nothing
+
+
+{#fun unsafe rd_kafka_produce as ^
+    {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Word8Ptr', 
+     cIntConv `CSize', castPtr `Word8Ptr', cIntConv `CSize', castPtr `Word8Ptr'}
+     -> `Int' #}
+
+{#fun unsafe rd_kafka_poll as ^
+    {`RdKafkaTPtr', `Int'} -> `Int' #}
+
+{#fun unsafe rd_kafka_outq_len as ^
+    {`RdKafkaTPtr'} -> `Int' #}
 
 {#fun unsafe rd_kafka_dump as ^
     {`CFilePtr', `RdKafkaTPtr'} -> `()' #}
