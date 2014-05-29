@@ -16,7 +16,7 @@ Simple instructions:
 
 On OSX, the C++ bindings were failing for me. If this is the case, just install the C bindings alone. 
 
-    cd lbirdkafka/src
+    cd librdkafka/src
     make && sudo make install
 
 ## Installing Kafka
