@@ -15,9 +15,11 @@ main = do
 
     kafka <- newKafka RdKafkaConsumer kConf
     addBrokers kafka "localhost:9092"
-    topic <- newKafkaTopic kafka "topic" kTopicConf
+    topic <- newKafkaTopic kafka "test" kTopicConf
 
-    startConsuming topic 0 0
+    startConsuming topic 0 KafkaOffsetBeginning
+    m <- consumeMessage topic 0 1000
+    print m
     m <- consumeMessage topic 0 1000
     print m
     stopConsuming topic 0

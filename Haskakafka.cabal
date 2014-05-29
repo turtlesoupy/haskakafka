@@ -23,6 +23,7 @@ library
   build-depends:       base >=4.6 && <4.7
                      , containers
                      , unix
+                     , bytestring
   exposed-modules:
     Haskakafka
     Haskakafka.Internal
@@ -42,6 +43,7 @@ executable tester_bester
   build-depends:       base >=4.6 && <4.7
                      , containers
                      , unix
+                     , bytestring
   default-language:    Haskell2010
   ghc-options: -Wall -threaded
   include-dirs:        /usr/local/include/librdkafka

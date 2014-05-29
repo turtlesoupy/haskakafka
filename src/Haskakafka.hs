@@ -2,6 +2,8 @@
 
 module Haskakafka 
 (  Kafka
+ , KafkaOffset(..)
+ , KafkaMessage
  , KafkaConf
  , KafkaTopicConf
  , hPrintKafkaProperties
@@ -32,6 +34,8 @@ import Control.Exception
 import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Internal as BSI
 
 data KafkaError = 
     KafkaError String
@@ -39,6 +43,20 @@ data KafkaError =
   | KafkaUnknownTopicPartition
   | KafkaBadSpecification String
     deriving (Show, Typeable)
+
+
+data KafkaMessage = KafkaMessage
+    { messagePartition :: Int
+    , messageOffset :: Int64
+    , messagePayload :: BS.ByteString
+    , messageKey :: Maybe BS.ByteString
+    }
+    deriving (Eq, Show, Read, Typeable)
+
+data KafkaOffset = KafkaOffsetBeginning
+                 | KafkaOffsetEnd
+                 | KafkaOffsetStored
+                 | KafkaOffset Int64
 
 instance Exception KafkaError
 
@@ -81,11 +99,22 @@ addBrokers (Kafka kptr) brokerStr = do
     when (numBrokers == 0) 
         (throw $ KafkaBadSpecification "No valid brokers specified")
 
-startConsuming :: KafkaTopic -> Int -> Int64 -> IO ()
+startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
 startConsuming (KafkaTopic topicPtr) partition offset = 
-    throwOnError $ rdKafkaConsumeStart topicPtr partition offset
+    let trueOffset = case offset of
+                        KafkaOffsetBeginning -> -2
+                        KafkaOffsetEnd -> -1
+                        KafkaOffsetStored -> -1000
+                        KafkaOffset i -> i
+    in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
 
-consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError String)
+
+word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
+word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
+    BSI.memcpy bsptr ptr len
+    
+
+consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage)
 consumeMessage (KafkaTopic topicPtr) partition timeout = do
     ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
     withForeignPtr ptr $ \realPtr ->
@@ -93,8 +122,16 @@ consumeMessage (KafkaTopic topicPtr) partition timeout = do
         else do
             addForeignPtrFinalizer rdKafkaMessageDestroy ptr
             s <- peek realPtr
-            print s
-            return $ Right "ABC"
+            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+
+            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+                   else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
+
+            return $ Right $ KafkaMessage
+                (partition'RdKafkaMessageT s) 
+                (offset'RdKafkaMessageT s)
+                payload
+                key 
 
 stopConsuming :: KafkaTopic -> Int -> IO ()
 stopConsuming (KafkaTopic topicPtr) partition = 
@@ -129,4 +166,5 @@ parseDump cstr = alloca $ \sizeptr -> do
 
 listToTuple :: [String] -> [(String, String)]
 listToTuple [] = []
+listToTuple _ = error "list to tuple can only be called on even length lists"
 listToTuple (k:v:t) = (k, v) : listToTuple t

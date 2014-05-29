@@ -5,6 +5,7 @@ module Haskakafka.Internal where
 
 import Control.Applicative
 import Control.Monad
+import Data.Word
 import Foreign
 import Foreign.C.Error
 import Foreign.C.String
@@ -25,6 +26,7 @@ type CInt32T = {#type int32_t #}
 {#pointer *FILE as CFilePtr -> CFile #} 
 {#pointer *size_t as CSizePtr -> CSize #}
 
+type Word8Ptr = Ptr Word8
 type CCharBufPointer  = Ptr CChar
 
 -- Helper functions
@@ -65,6 +67,8 @@ data RdKafkaMessageT = RdKafkaMessageT
     , len'RdKafkaMessageT :: Int
     , keyLen'RdKafkaMessageT :: Int
     , offset'RdKafkaMessageT :: Int64
+    , payload'RdKafkaMessageT :: Word8Ptr
+    , key'RdKafkaMessageT :: Word8Ptr
     }
     deriving (Show, Eq)
     
@@ -77,6 +81,8 @@ instance Storable RdKafkaMessageT where
         <*> liftM fromIntegral ({#get rd_kafka_message_t->len #} p)
         <*> liftM fromIntegral ({#get rd_kafka_message_t->key_len#} p)
         <*> liftM fromIntegral ({#get rd_kafka_message_t->offset#} p)
+        <*> liftM castPtr ({#get rd_kafka_message_t->payload#} p)
+        <*> liftM castPtr ({#get rd_kafka_message_t->key#} p)
     poke p x = undefined
 
 {#pointer *rd_kafka_message_t as RdKafkaMessageTPtr foreign -> RdKafkaMessageT #}
