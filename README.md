@@ -3,7 +3,7 @@
 Kafka bindings for Haskell backed by the 
 librdkafka C module (https://github.com/edenhill/librdkafka). 
 
-Currently limited to consumers only.
+These are meant to be a proof of concept and need some cleanup before production use.
 
 ## Installing librtkafka
 
