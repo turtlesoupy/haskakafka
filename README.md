@@ -5,7 +5,7 @@ librdkafka C module (https://github.com/edenhill/librdkafka).
 
 These are meant to be a proof of concept and need some cleanup before production use.
 
-## Installing librtkafka
+## Installing librdkafka
 
 ### Ubuntu
 
