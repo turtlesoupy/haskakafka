@@ -6,13 +6,10 @@ librdkafka C module (https://github.com/edenhill/librdkafka).
 These are meant to be a proof of concept and need some cleanup before production use.
 
 ## Installing librdkafka
+Although librdkafka is available on many platforms, most of
+the distribution packages are too old to support haskakafka.
+As such, we suggest you install from the source:
 
-### Ubuntu
-
-    sudo apt-get install librdkafka-dev
-
-
-### OSX
     git clone https://github.com/edenhill/librdkafka
     cd librdkafka
     ./configure
