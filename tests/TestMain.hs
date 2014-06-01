@@ -1,11 +1,21 @@
-module Main (main) where
+module Main (testmain, main) where
 
 import Haskakafka
 
 import Control.Monad
-import System.IO
+import Test.Hspec
+import Control.Exception (evaluate)
 
 import qualified Data.ByteString.Char8 as BS
+
+testmain :: IO ()
+testmain = hspec $ do
+  describe "Prelude.head" $ do
+    it "returns the first element of a list" $ do
+      head [23 ..] `shouldBe` (23 :: Int)
+
+    it "throws an exception if used with an empty list" $ do
+      evaluate (head []) `shouldThrow` anyException
 
 doConsume :: IO ()
 doConsume = do
@@ -16,9 +26,9 @@ doConsume = do
     topic <- newKafkaTopic kafka "test" kTopicConf
 
     startConsuming topic 0 (KafkaOffsetBeginning)
-    forever $ do
-        m <- consumeMessage topic 0 (1000 * 1000)
-        print m
+    _ <- forever $ do
+          m <- consumeMessage topic 0 (1000 * 1000)
+          print m
     stopConsuming topic 0
 
 doProduce :: IO ()
@@ -38,7 +48,7 @@ doProduce = do
 
 main :: IO ()
 main = do
-    -- doProduce
+    doProduce
     doConsume
 
 
@@ -51,3 +61,4 @@ main = do
     --print topics
     --c_rd_kafka_topic_conf_destroy t
     --putStrLn $ "Cleaned up"
+  

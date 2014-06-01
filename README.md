@@ -7,8 +7,12 @@ These are meant to be a proof of concept and need some cleanup before production
 
 ## Installing librtkafka
 
-Simple instructions:
+### Ubuntu
 
+    sudo apt-get install librdkafka-dev
+
+
+### OSX
     git clone https://github.com/edenhill/librdkafka
     cd librdkafka
     ./configure
