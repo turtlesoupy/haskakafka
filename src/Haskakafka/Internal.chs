@@ -95,6 +95,90 @@ instance Storable RdKafkaMessageT where
 
 {#pointer *rd_kafka_message_t as RdKafkaMessageTPtr foreign -> RdKafkaMessageT #}
 
+data RdKafkaMetadataBrokerT = RdKafkaMetadataBrokerT
+  { id'RdKafkaMetadataBrokerT  :: Int
+  , host'RdKafkaMetadataBrokerT :: CString
+  , port'RdKafkaMetadataBrokerT :: Int
+  } deriving (Show, Eq)
+
+{#pointer *rd_kafka_metadata_broker_t as RdKafkaMetadataBrokerTPtr -> RdKafkaMetadataBrokerT #}
+
+
+instance Storable RdKafkaMetadataBrokerT where
+  alignment _ = {#alignof rd_kafka_metadata_broker_t#}
+  sizeOf _ = {#sizeof rd_kafka_metadata_broker_t#}
+  peek p = RdKafkaMetadataBrokerT
+    <$> liftM fromIntegral ({#get rd_kafka_metadata_broker_t->id #} p)
+    <*> liftM id ({#get rd_kafka_metadata_broker_t->host #} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_broker_t->port #} p)
+  poke = undefined
+
+data RdKafkaMetadataPartitionT = RdKafkaMetadataPartitionT
+  { id'RdKafkaMetadataPartitionT :: Int
+  , err'RdKafkaMetadataPartitionT :: RdKafkaRespErrT
+  , leader'RdKafkaMetadataPartitionT :: Int
+  , replicaCnt'RdKafkaMetadataPartitionT :: Int
+  , replicas'RdKafkaMetadataPartitionT :: Ptr CInt32T
+  , isrCnt'RdKafkaMetadataPartitionT :: Int
+  , isrs'RdKafkaMetadataPartitionT :: Ptr CInt32T
+  } deriving (Show, Eq)
+
+instance Storable RdKafkaMetadataPartitionT where
+  alignment _ = {#alignof rd_kafka_metadata_partition_t#}
+  sizeOf _ = {#sizeof rd_kafka_metadata_partition_t#}
+  peek p = RdKafkaMetadataPartitionT
+    <$> liftM fromIntegral ({#get rd_kafka_metadata_partition_t->id#} p)
+    <*> liftM cIntToEnum ({#get rd_kafka_metadata_partition_t->err#} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_partition_t->leader#} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_partition_t->replica_cnt#} p)
+    <*> liftM castPtr ({#get rd_kafka_metadata_partition_t->replicas#} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_partition_t->isr_cnt#} p)
+    <*> liftM castPtr ({#get rd_kafka_metadata_partition_t->isrs#} p)
+
+  poke = undefined
+
+{#pointer *rd_kafka_metadata_partition_t as RdKafkaMetadataPartitionTPtr -> RdKafkaMetadataPartitionT #}
+
+data RdKafkaMetadataTopicT = RdKafkaMetadataTopicT
+  { topic'RdKafkaMetadataTopicT :: CString
+  , partitionCnt'RdKafkaMetadataTopicT :: Int
+  , partitions'RdKafkaMetadataTopicT :: Ptr RdKafkaMetadataPartitionT
+  , err'RdKafkaMetadataTopicT :: RdKafkaRespErrT
+  } deriving (Show, Eq)
+
+instance Storable RdKafkaMetadataTopicT where
+  alignment _ = {#alignof rd_kafka_metadata_topic_t#}
+  sizeOf _ = {#sizeof rd_kafka_metadata_topic_t #}
+  peek p = RdKafkaMetadataTopicT
+    <$> liftM id ({#get rd_kafka_metadata_topic_t->topic #} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_topic_t->partition_cnt #} p)
+    <*> liftM castPtr ({#get rd_kafka_metadata_topic_t->partitions #} p)
+    <*> liftM cIntToEnum ({#get rd_kafka_metadata_topic_t->err #} p)
+  poke p x = undefined
+
+{#pointer *rd_kafka_metadata_topic_t as RdKafkaMetadataTopicTPtr -> RdKafkaMetadataTopicT #}
+
+data RdKafkaMetadataT = RdKafkaMetadataT
+  { brokerCnt'RdKafkaMetadataT :: Int
+  , brokers'RdKafkaMetadataT :: RdKafkaMetadataBrokerTPtr
+  , topicCnt'RdKafkaMetadataT :: Int
+  , topics'RdKafkaMetadataT :: RdKafkaMetadataTopicTPtr
+  , origBrokerId'RdKafkaMetadataT :: CInt32T
+  } deriving (Show, Eq)
+
+instance Storable RdKafkaMetadataT where
+  alignment _ = {#alignof rd_kafka_metadata_t#}
+  sizeOf _ = {#sizeof rd_kafka_metadata_t#}
+  peek p = RdKafkaMetadataT
+    <$> liftM fromIntegral ({#get rd_kafka_metadata_t->broker_cnt #} p)
+    <*> liftM castPtr ({#get rd_kafka_metadata_t->brokers #} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_t->topic_cnt #} p)
+    <*> liftM castPtr ({#get rd_kafka_metadata_t->topics #} p)
+    <*> liftM fromIntegral ({#get rd_kafka_metadata_t->orig_broker_id #} p)
+  poke p x = undefined
+
+{#pointer *rd_kafka_metadata_t as RdKafkaMetadataTPtr foreign -> RdKafkaMetadataT #}
+
 -- rd_kafka_conf
 {#fun unsafe rd_kafka_conf_new as ^
     {} -> `RdKafkaConfTPtr' #}
@@ -194,6 +278,17 @@ rdKafkaConsumeStop topicPtr partition = do
      cIntConv `CSize', castPtr `Word8Ptr', cIntConv `CSize', castPtr `Word8Ptr'}
      -> `Int' #}
 
+castMetadata :: Ptr (Ptr RdKafkaMetadataT) -> Ptr (Ptr ())
+castMetadata ptr = castPtr ptr
+
+{#fun unsafe rd_kafka_metadata as ^
+   {`RdKafkaTPtr', boolToCInt `Bool', `RdKafkaTopicTPtr', 
+    castMetadata `Ptr (Ptr RdKafkaMetadataT)', `Int'}
+   -> `RdKafkaRespErrT' cIntToEnum #}
+
+{# fun unsafe rd_kafka_metadata_destroy as ^
+   {castPtr `Ptr RdKafkaMetadataT'} -> `()' #}
+
 {#fun unsafe rd_kafka_poll as ^
     {`RdKafkaTPtr', `Int'} -> `Int' #}
 
@@ -229,6 +324,9 @@ cIntToEnum :: Enum a => CInt -> a
 cIntToEnum = toEnum . fromIntegral
 cIntConv :: (Integral a, Num b) =>  a -> b
 cIntConv = fromIntegral
+boolToCInt :: Bool -> CInt
+boolToCInt True = CInt 1
+boolToCInt False = CInt 0
 
 -- Handle -> File descriptor
 

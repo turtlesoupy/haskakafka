@@ -5,6 +5,10 @@ module Haskakafka
  , KafkaConf
  , KafkaMessage(..)
  , KafkaOffset(..)
+ , KafkaMetadata(..)
+ , KafkaBrokerMetadata(..)
+ , KafkaTopicMetadata(..)
+ , KafkaPartitionMetadata(..)
  , KafkaTopic
  , KafkaTopicConf
  , KafkaType(..)
@@ -23,18 +27,20 @@ module Haskakafka
  , produceMessage
  , pollEvents
  , drainOutQueue
+ , getAllMetadata
+ , getTopicMetadata
 ) where
 
 import Foreign
-import Foreign.ForeignPtr
-import Foreign.Marshal.Alloc
-import Foreign.Storable
 import Foreign.C.String
 import Foreign.C.Error
+import Foreign.C.Types
+import Foreign.Marshal.Alloc
 import Haskakafka.Internal
 import System.IO
 import Control.Monad
 import Control.Exception
+import Control.Exception.Base
 import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -48,7 +54,7 @@ data KafkaError =
   | KafkaTimedOut
   | KafkaResponseError RdKafkaRespErrT
   | KafkaUnknownTopicPartition
-    deriving (Show, Typeable)
+    deriving (Eq, Show, Typeable)
 
 
 data KafkaMessage = KafkaMessage
@@ -154,12 +160,111 @@ produceMessage (KafkaTopic topicPtr) km = do
         
         err <- rdKafkaProduce topicPtr (fromIntegral $ messagePartition km)
                 msgFlags passedPayload (fromIntegral payloadLength)
-                nullPtr (fromIntegral 0) nullPtr
+                nullPtr (CSize 0) nullPtr
 
         case err of
             -1 -> getErrno >>= return . Just . kafkaRespErr 
             0 -> return Nothing
             _ -> return $ Just $ KafkaInvalidReturnValue
+
+data KafkaMetadata = KafkaMetadata
+    { brokers :: [KafkaBrokerMetadata]
+    , topics :: [Either KafkaError KafkaTopicMetadata]
+    } deriving (Eq, Show, Typeable)
+
+data KafkaBrokerMetadata = KafkaBrokerMetadata
+    { brokerId :: Int
+    , brokerHost :: String
+    , brokerPort :: Int
+    } deriving (Eq, Show, Typeable)
+
+data KafkaTopicMetadata = KafkaTopicMetadata
+    { topicName :: String
+    , topicPartitions :: [Either KafkaError KafkaPartitionMetadata]
+    } deriving (Eq, Show, Typeable)
+
+data KafkaPartitionMetadata = KafkaPartitionMetadata
+    { partitionId :: Int
+    , partitionLeader :: Int
+    , partitionReplicas :: [Int] 
+    , partitionIsrs :: [Int]
+    } deriving (Eq, Show, Typeable)
+
+getAllMetadata :: Kafka -> Int -> IO (Either KafkaError KafkaMetadata)
+getAllMetadata k timeout = getMetadata k Nothing timeout
+
+getTopicMetadata :: Kafka -> KafkaTopic -> Int -> IO (Either KafkaError KafkaTopicMetadata)
+getTopicMetadata k kt timeout = do
+  err <- getMetadata k (Just kt) timeout
+  case err of 
+    Left e -> return $ Left $ e
+    Right md -> case (topics md) of 
+      [(Left e)] -> return $ Left e
+      [(Right tmd)] -> return $ Right tmd
+      _ -> return $ Left $ KafkaError "Incorrect number of topics returned"
+
+getMetadata :: Kafka -> Maybe KafkaTopic -> Int -> IO (Either KafkaError KafkaMetadata)
+getMetadata (Kafka kPtr) mTopic timeout = alloca $ \mdDblPtr -> do
+    err <- case mTopic of  
+      Just (KafkaTopic kTopicPtr) -> 
+        rdKafkaMetadata kPtr False kTopicPtr mdDblPtr timeout
+      Nothing -> do
+        nullTopic <- newForeignPtr_ nullPtr
+        rdKafkaMetadata kPtr True nullTopic mdDblPtr timeout
+
+    case err of 
+      RdKafkaRespErrNoError -> do
+        mdPtr <- peek mdDblPtr
+        md <- peek mdPtr
+        retMd <- constructMetadata md
+        rdKafkaMetadataDestroy mdPtr
+        return $ Right $ retMd
+      e -> return $ Left $ KafkaResponseError e
+
+    where 
+      constructMetadata md =  do
+        let nBrokers = (brokerCnt'RdKafkaMetadataT md)
+            brokersPtr = (brokers'RdKafkaMetadataT md)
+            nTopics = (topicCnt'RdKafkaMetadataT md)
+            topicsPtr = (topics'RdKafkaMetadataT md)
+
+        brokerMds <- mapM (\i -> constructBrokerMetadata =<< peekElemOff brokersPtr i) [0..((fromIntegral nBrokers) - 1)]
+        topicMds <- mapM (\i -> constructTopicMetadata =<< peekElemOff topicsPtr i) [0..((fromIntegral nTopics) - 1)]
+        return $ KafkaMetadata brokerMds topicMds
+
+      constructBrokerMetadata bmd = do
+        hostStr <- peekCString (host'RdKafkaMetadataBrokerT bmd)
+        return $ KafkaBrokerMetadata 
+                  (id'RdKafkaMetadataBrokerT bmd)
+                  (hostStr)
+                  (port'RdKafkaMetadataBrokerT bmd)
+
+      constructTopicMetadata tmd = do
+        case (err'RdKafkaMetadataTopicT tmd) of
+          RdKafkaRespErrNoError -> do
+            let nPartitions = (partitionCnt'RdKafkaMetadataTopicT tmd)
+                partitionsPtr = (partitions'RdKafkaMetadataTopicT tmd)
+
+            topicStr <- peekCString (topic'RdKafkaMetadataTopicT tmd)
+            partitionsMds <- mapM (\i -> constructPartitionMetadata =<< peekElemOff partitionsPtr i) [0..((fromIntegral nPartitions) - 1)]
+            return $ Right $ KafkaTopicMetadata topicStr partitionsMds
+          e -> return $ Left $ KafkaResponseError e
+
+      constructPartitionMetadata pmd = do
+        case (err'RdKafkaMetadataPartitionT pmd) of
+          RdKafkaRespErrNoError -> do
+            let nReplicas = (replicaCnt'RdKafkaMetadataPartitionT pmd)
+                replicasPtr = (replicas'RdKafkaMetadataPartitionT pmd)
+                nIsrs = (isrCnt'RdKafkaMetadataPartitionT pmd)
+                isrsPtr = (isrs'RdKafkaMetadataPartitionT pmd)
+            replicas <- mapM (\i -> peekElemOff replicasPtr i) [0..((fromIntegral nReplicas) - 1)]
+            isrs <- mapM (\i -> peekElemOff isrsPtr i) [0..((fromIntegral nIsrs) - 1)]
+            return $ Right $ KafkaPartitionMetadata 
+              (id'RdKafkaMetadataPartitionT pmd)              
+              (leader'RdKafkaMetadataPartitionT pmd)
+              (map fromIntegral replicas)
+              (map fromIntegral isrs)
+          e -> return $ Left $ KafkaResponseError e
 
 pollEvents :: Kafka -> Int -> IO ()
 pollEvents (Kafka kPtr) timeout = rdKafkaPoll kPtr timeout >> return ()
