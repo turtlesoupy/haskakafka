@@ -32,18 +32,20 @@ module Haskakafka
  , drainOutQueue
  , getAllMetadata
  , getTopicMetadata
+ , module Haskakafka.InternalEnum
 ) where
 
+import Control.Exception
+import Control.Monad
+import Data.Map.Strict (Map)
+import Data.Typeable
 import Foreign
-import Foreign.C.String
 import Foreign.C.Error
+import Foreign.C.String
 import Foreign.C.Types
 import Haskakafka.Internal
+import Haskakafka.InternalEnum
 import System.IO
-import Control.Monad
-import Control.Exception
-import Data.Typeable
-import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
@@ -52,11 +54,10 @@ data KafkaError =
     KafkaError String
   | KafkaInvalidReturnValue
   | KafkaBadSpecification String
-  | KafkaTimedOut
   | KafkaResponseError RdKafkaRespErrT
-  | KafkaUnknownTopicPartition
     deriving (Eq, Show, Typeable)
 
+instance Exception KafkaError
 
 data KafkaMessage = KafkaMessage
     { messagePartition :: !Int
@@ -82,8 +83,6 @@ data KafkaOffset = KafkaOffsetBeginning
                  | KafkaOffsetEnd
                  | KafkaOffsetStored
                  | KafkaOffset Int64
-
-instance Exception KafkaError
 
 data KafkaType = KafkaConsumer | KafkaProducer
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}

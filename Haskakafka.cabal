@@ -1,5 +1,5 @@
 name:                haskakafka
-version:             0.1.0.7
+version:             0.1.0.8
 -- synopsis:            
 -- description:         
 license:             MIT
@@ -21,6 +21,7 @@ library
   exposed-modules:
     Haskakafka
     Haskakafka.Internal
+    Haskakafka.InternalEnum
   hs-source-dirs:      src
   default-language:    Haskell2010
   ghc-options: -Wall -threaded
@@ -35,6 +36,7 @@ executable tester_bester
   build-depends:       base >=4.6 && <4.7
                      , containers
                      , unix
+                     , haskakafka
                      , bytestring
   default-language:    Haskell2010
   ghc-options: -Wall -threaded

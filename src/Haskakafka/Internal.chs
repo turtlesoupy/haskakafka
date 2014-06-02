@@ -10,6 +10,7 @@ import Foreign
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
+import Haskakafka.InternalEnum
 import System.IO
 import System.Posix.IO
 import System.Posix.Types
@@ -26,10 +27,6 @@ type CInt32T = {#type int32_t #}
 
 type Word8Ptr = Ptr Word8
 type CCharBufPointer  = Ptr CChar
-
-{#enum rd_kafka_type_t as ^ {underscoreToCase} deriving (Show, Eq) #}
-{#enum rd_kafka_conf_res_t as ^ {underscoreToCase} deriving (Show, Eq) #}
-{#enum rd_kafka_resp_err_t as ^ {underscoreToCase} deriving (Show, Eq) #}
 
 type RdKafkaMsgFlag = Int
 rdKafkaMsgFlagFree :: RdKafkaMsgFlag
