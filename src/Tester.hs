@@ -28,8 +28,8 @@ doProduce = do
     addBrokers kafka "localhost:9092"
     kTopicConf <- newKafkaTopicConf
     topic <- newKafkaTopic kafka "test" kTopicConf
-    let me = KafkaMessage 0 0 (BS.pack "hi") Nothing
-    err <- produceMessage topic me
+    let me = KafkaProduceMessage (BS.pack "hi") 
+    err <- produceMessage topic KafkaUnassignedPartition me 
 
     drainOutQueue kafka
             
@@ -50,7 +50,7 @@ main = do
 
     getAllMetadata kafka 1000 >>= print
     putStrLn "TOPIC MD"
-    getTopicMetadata kafka topic 1000 >>= print
+    getTopicMetadata kafka topic (1000 * 10) >>= print
 
     -- hPrintKafkaProperties stdout
     --o <- c_stdout

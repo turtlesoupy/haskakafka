@@ -9,6 +9,8 @@ module Haskakafka
  , KafkaBrokerMetadata(..)
  , KafkaTopicMetadata(..)
  , KafkaPartitionMetadata(..)
+ , KafkaProduceMessage(..)
+ , KafkaProducePartition(..)
  , KafkaTopic
  , KafkaTopicConf
  , KafkaType(..)
@@ -36,12 +38,10 @@ import Foreign
 import Foreign.C.String
 import Foreign.C.Error
 import Foreign.C.Types
-import Foreign.Marshal.Alloc
 import Haskakafka.Internal
 import System.IO
 import Control.Monad
 import Control.Exception
-import Control.Exception.Base
 import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
@@ -59,12 +59,24 @@ data KafkaError =
 
 
 data KafkaMessage = KafkaMessage
-    { messagePartition :: Int
-    , messageOffset :: Int64
-    , messagePayload :: BS.ByteString
+    { messagePartition :: !Int
+    , messageOffset :: !Int64
+    , messagePayload :: !BS.ByteString
     , messageKey :: Maybe BS.ByteString
     }
     deriving (Eq, Show, Read, Typeable)
+
+data KafkaProduceMessage = 
+    KafkaProduceMessage 
+      {-# UNPACK #-} !BS.ByteString
+  | KafkaProduceKeyedMessage 
+      {-# UNPACK #-} !BS.ByteString -- | Key
+      {-# UNPACK #-} !BS.ByteString -- | Payload
+      
+
+data KafkaProducePartition = 
+    KafkaSpecifiedPartition {-# UNPACK #-} !Int
+  | KafkaUnassignedPartition
 
 data KafkaOffset = KafkaOffsetBeginning
                  | KafkaOffsetEnd
@@ -155,22 +167,47 @@ consumeMessage (KafkaTopic topicPtr _) partition timeout = do
                     payload
                     key 
 
-produceMessage :: KafkaTopic -> KafkaMessage -> IO (Maybe KafkaError)
-produceMessage (KafkaTopic topicPtr _) km = do
-    let msgFlags = rdKafkaMsgFlagCopy
-        (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr (messagePayload km)
+produceMessage :: KafkaTopic -> KafkaProducePartition -> KafkaProduceMessage -> IO (Maybe KafkaError)
+produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) = do
+    let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
 
     withForeignPtr payloadFPtr $ \payloadPtr -> do
         let passedPayload = payloadPtr `plusPtr` payloadOffset
         
-        err <- rdKafkaProduce topicPtr (fromIntegral $ messagePartition km)
-                msgFlags passedPayload (fromIntegral payloadLength)
-                nullPtr (CSize 0) nullPtr
+        handleProduceErr =<< 
+          rdKafkaProduce topicPtr (producePartitionInteger partition)
+            copyMsgFlags passedPayload (fromIntegral payloadLength)
+            nullPtr (CSize 0) nullPtr
 
-        case err of
-            -1 -> getErrno >>= return . Just . kafkaRespErr 
-            0 -> return Nothing
-            _ -> return $ Just $ KafkaInvalidReturnValue
+produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceKeyedMessage key payload) = do
+    let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
+        (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr key
+
+    withForeignPtr payloadFPtr $ \payloadPtr -> do
+        withForeignPtr keyFPtr $ \keyPtr -> do
+          let passedPayload = payloadPtr `plusPtr` payloadOffset
+              passedKey = keyPtr `plusPtr` keyOffset
+
+          handleProduceErr =<< 
+            rdKafkaProduce topicPtr (producePartitionInteger partition)
+              copyMsgFlags passedPayload (fromIntegral payloadLength)
+              passedKey (fromIntegral keyLength) nullPtr
+
+{-# INLINE copyMsgFlags  #-}
+copyMsgFlags :: Int
+copyMsgFlags = rdKafkaMsgFlagCopy
+
+{-# INLINE producePartitionInteger #-}
+producePartitionInteger :: KafkaProducePartition -> CInt
+producePartitionInteger KafkaUnassignedPartition = -1
+producePartitionInteger (KafkaSpecifiedPartition n) = fromIntegral n
+
+{-# INLINE handleProduceErr #-}
+handleProduceErr :: Int -> IO (Maybe KafkaError)
+handleProduceErr (- 1) = getErrno >>= return . Just . kafkaRespErr 
+handleProduceErr 0 = return $ Nothing
+handleProduceErr _ = return $ Just $ KafkaInvalidReturnValue
+
 
 data KafkaMetadata = KafkaMetadata
     { brokers :: [KafkaBrokerMetadata]
