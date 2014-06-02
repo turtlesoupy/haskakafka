@@ -30,15 +30,16 @@ doProduce = do
     topic <- newKafkaTopic kafka "test" kTopicConf
     let me = KafkaProduceMessage (BS.pack "hi") 
     err <- produceMessage topic KafkaUnassignedPartition me 
+    print err
+    errs <- produceMessageBatch topic KafkaUnassignedPartition [me ]
+    print errs
 
     drainOutQueue kafka
-            
-    print err
 
 
 main :: IO ()
 main = do
-    -- doProduce
+    doProduce
     -- doConsume
 
     kConf <- newKafkaConf

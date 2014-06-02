@@ -88,7 +88,14 @@ instance Storable RdKafkaMessageT where
         <*> liftM fromIntegral ({#get rd_kafka_message_t->offset#} p)
         <*> liftM castPtr ({#get rd_kafka_message_t->payload#} p)
         <*> liftM castPtr ({#get rd_kafka_message_t->key#} p)
-    poke p x = undefined
+    poke p x = do
+      {#set rd_kafka_message_t.err#} p (enumToCInt $ err'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.partition#} p (fromIntegral $ partition'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.len#} p (fromIntegral $ len'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.key_len#} p (fromIntegral $ keyLen'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.offset#} p (fromIntegral $ offset'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.payload#} p (castPtr $ payload'RdKafkaMessageT x)
+      {#set rd_kafka_message_t.key#} p (castPtr $ key'RdKafkaMessageT x)
 
 {#pointer *rd_kafka_message_t as RdKafkaMessageTPtr foreign -> RdKafkaMessageT #}
 
@@ -274,6 +281,9 @@ rdKafkaConsumeStop topicPtr partition = do
     {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Word8Ptr', 
      cIntConv `CSize', castPtr `Word8Ptr', cIntConv `CSize', castPtr `Word8Ptr'}
      -> `Int' #}
+
+{#fun unsafe rd_kafka_produce_batch as ^
+    {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', `RdKafkaMessageTPtr', `Int'} -> `Int' #}
 
 castMetadata :: Ptr (Ptr RdKafkaMetadataT) -> Ptr (Ptr ())
 castMetadata ptr = castPtr ptr

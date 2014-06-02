@@ -28,6 +28,7 @@ module Haskakafka
  , consumeMessage
  , stopConsuming
  , produceMessage
+ , produceMessageBatch
  , pollEvents
  , drainOutQueue
  , getAllMetadata
@@ -73,6 +74,7 @@ data KafkaProduceMessage =
   | KafkaProduceKeyedMessage 
       {-# UNPACK #-} !BS.ByteString -- | Key
       {-# UNPACK #-} !BS.ByteString -- | Payload
+  deriving (Eq, Show, Typeable)
       
 
 data KafkaProducePartition = 
@@ -191,6 +193,53 @@ produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceKeyedMessage key p
             rdKafkaProduce topicPtr (producePartitionInteger partition)
               copyMsgFlags passedPayload (fromIntegral payloadLength)
               passedKey (fromIntegral keyLength) nullPtr
+
+produceMessageBatch :: KafkaTopic -> KafkaProducePartition -> [KafkaProduceMessage] -> IO ([(KafkaProduceMessage, KafkaError)])
+produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
+  storables <- forM pms produceMessageToMessage
+  withArray storables $ \batchPtr -> do
+    batchPtrF <- newForeignPtr_ batchPtr
+    numRet <- rdKafkaProduceBatch topicPtr partitionInt copyMsgFlags batchPtrF (length storables)
+    if numRet == (length storables) then return []
+    else do 
+      errs <- mapM (\i -> return . err'RdKafkaMessageT =<< peekElemOff batchPtr i) 
+                   [0..((fromIntegral $ length storables) - 1)]
+      return [(m, KafkaResponseError e) | (m, e) <- (zip pms errs), e /= RdKafkaRespErrNoError]
+  where
+    partitionInt = (producePartitionInteger partition)
+    produceMessageToMessage (KafkaProduceMessage bs) =  do
+        let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
+        withForeignPtr payloadFPtr $ \payloadPtr -> do
+          let passedPayload = payloadPtr `plusPtr` payloadOffset
+          return $ RdKafkaMessageT 
+              { err'RdKafkaMessageT = RdKafkaRespErrNoError 
+              , partition'RdKafkaMessageT = fromIntegral partitionInt
+              , len'RdKafkaMessageT = payloadLength
+              , payload'RdKafkaMessageT = passedPayload
+              , offset'RdKafkaMessageT = 0
+              , keyLen'RdKafkaMessageT = 0
+              , key'RdKafkaMessageT = nullPtr
+              }
+    produceMessageToMessage (KafkaProduceKeyedMessage bs kbs) =  do
+        let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
+            (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr kbs
+             
+        withForeignPtr payloadFPtr $ \payloadPtr -> do
+          withForeignPtr keyFPtr $ \keyPtr -> do
+            let passedPayload = payloadPtr `plusPtr` payloadOffset
+                passedKey = keyPtr `plusPtr` keyOffset
+
+            return $ RdKafkaMessageT 
+                { err'RdKafkaMessageT = RdKafkaRespErrNoError 
+                , partition'RdKafkaMessageT = fromIntegral partitionInt
+                , len'RdKafkaMessageT = payloadLength
+                , payload'RdKafkaMessageT = passedPayload
+                , offset'RdKafkaMessageT = 0
+                , keyLen'RdKafkaMessageT = keyLength
+                , key'RdKafkaMessageT = keyPtr
+                }
+      
+      
 
 {-# INLINE copyMsgFlags  #-}
 copyMsgFlags :: Int
