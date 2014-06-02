@@ -155,7 +155,7 @@ consumeMessage (KafkaTopic topicPtr _) partition timeout = do
         else do
             addForeignPtrFinalizer rdKafkaMessageDestroy ptr
             s <- peek realPtr
-            if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaError $ rdKafkaErr2str $ err'RdKafkaMessageT s
+            if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaResponseError $ err'RdKafkaMessageT s
             else do
                 payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
 
