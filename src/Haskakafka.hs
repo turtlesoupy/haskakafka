@@ -12,6 +12,7 @@ module Haskakafka
  , KafkaTopic
  , KafkaTopicConf
  , KafkaType(..)
+ , KafkaError (..)
  , hPrintKafkaProperties
  , hPrintKafka
  , newKafkaConf
