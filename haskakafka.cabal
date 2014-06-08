@@ -1,5 +1,5 @@
 name:                haskakafka
-version:             0.2.0.0
+version:             0.2.0.1
 synopsis:            Kafka bindings for Haskell
 description:         Use Apache Kafka in Haskell through the librdkafka
                      C library. The library is preliminary but fully
