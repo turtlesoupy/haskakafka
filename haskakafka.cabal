@@ -4,7 +4,7 @@ synopsis:            Kafka bindings for Haskell
 description:         Use Apache Kafka in Haskell through the librdkafka
                      C library. The library is preliminary but fully
                      functional. 
-homepage:            http://github.com/cosbynator/haskafka
+homepage:            http://github.com/cosbynator/haskakafka
 license:             MIT
 license-file:        LICENSE
 author:              Thomas Dimson <tdimson@cs.stanford.edu>
@@ -17,7 +17,7 @@ cabal-version:       >=1.10
 
 source-repository head
   type:     git
-  location: git://github.com/cosbynator/haskafka.git
+  location: git://github.com/cosbynator/haskakafka.git
 
 library
   Build-tools: c2hs
