@@ -12,6 +12,7 @@ import Foreign.C.String
 import Foreign.C.Types
 import Haskakafka.InternalEnum
 import System.IO
+import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.IO
 import System.Posix.Types
 
