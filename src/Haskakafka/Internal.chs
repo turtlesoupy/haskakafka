@@ -6,7 +6,7 @@ module Haskakafka.Internal where
 import Control.Applicative
 import Control.Monad
 import Data.Word
-import Foreign
+import Foreign hiding (unsafePerformIO)
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types

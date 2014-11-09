@@ -21,8 +21,8 @@ source-repository head
 
 library
   Build-tools: c2hs
-  build-depends:       base >=4.7 && < 5
-                     , containers
+  build-depends:       base >=4.6 && < 5
+                     , containers 
                      , unix
                      , bytestring
   exposed-modules:
