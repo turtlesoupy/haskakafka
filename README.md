@@ -34,3 +34,7 @@ explicitly install `c2hs` somewhere on your path (i.e. outside of a sandbox).
 To do so, run:
     
     cabal install c2hs
+
+Afterwards installation should work, so go for
+
+    cabal install haskakafka
