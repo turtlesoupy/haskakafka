@@ -120,8 +120,8 @@ newKafka kafkaType (KafkaConf confPtr) = do
         Right x -> return $ Kafka x
 
 newKafkaTopic :: Kafka -> String -> KafkaTopicConf -> IO (KafkaTopic)
-newKafkaTopic k@(Kafka kafkaPtr) topicName (KafkaTopicConf confPtr) = do
-    et <- newRdKafkaTopicT kafkaPtr topicName confPtr
+newKafkaTopic k@(Kafka kPtr) tName (KafkaTopicConf confPtr) = do
+    et <- newRdKafkaTopicT kPtr tName confPtr
     case et of 
         Left e -> throw $ KafkaError e
         Right x -> return $ KafkaTopic x k
@@ -238,8 +238,6 @@ produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
                 , keyLen'RdKafkaMessageT = keyLength
                 , key'RdKafkaMessageT = keyPtr
                 }
-      
-      
 
 {-# INLINE copyMsgFlags  #-}
 copyMsgFlags :: Int
