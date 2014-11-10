@@ -25,6 +25,7 @@ library
                      , containers 
                      , unix
                      , bytestring
+                     , temporary
   exposed-modules:
     Haskakafka
     Haskakafka.Internal
@@ -46,3 +47,4 @@ test-suite tests
                 , hspec
                 , bytestring
                 , haskakafka
+                , regex-posix

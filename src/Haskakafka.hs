@@ -15,6 +15,8 @@ module Haskakafka
  , KafkaTopicConf
  , KafkaType(..)
  , KafkaError (..)
+ , rdKafkaVersionStr
+ , supportedKafkaConfProperties
  , hPrintKafkaProperties
  , hPrintKafka
  , newKafkaConf
@@ -47,6 +49,7 @@ import Foreign.C.Types
 import Haskakafka.Internal
 import Haskakafka.InternalEnum
 import System.IO
+import System.IO.Temp (withSystemTempFile)
 import qualified Data.Map.Strict as Map
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
@@ -99,6 +102,13 @@ data KafkaTopicConf = KafkaTopicConf {kafkaTopicConfPtr :: RdKafkaTopicConfTPtr}
 kafkaTypeToRdKafkaType :: KafkaType -> RdKafkaTypeT
 kafkaTypeToRdKafkaType KafkaConsumer = RdKafkaConsumer
 kafkaTypeToRdKafkaType KafkaProducer = RdKafkaProducer
+
+-- Because of the rdKafka API, we have to create a temp file to get properties into a string
+supportedKafkaConfProperties :: IO (String)
+supportedKafkaConfProperties = do 
+  withSystemTempFile "haskakafka.rdkafka_properties" $ \tP tH -> do
+    hPrintKafkaProperties tH
+    readFile tP
 
 hPrintKafkaProperties :: Handle -> IO ()
 hPrintKafkaProperties h = handleToCFile h "w" >>= rdKafkaConfPropertiesShow
@@ -277,6 +287,7 @@ data KafkaPartitionMetadata = KafkaPartitionMetadata
     , partitionReplicas :: [Int] 
     , partitionIsrs :: [Int]
     } deriving (Eq, Show, Typeable)
+
 
 getAllMetadata :: Kafka -> Int -> IO (Either KafkaError KafkaMetadata)
 getAllMetadata k timeout = getMetadata k Nothing timeout
