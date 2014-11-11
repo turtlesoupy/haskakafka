@@ -22,10 +22,10 @@ source-repository head
 library
   Build-tools: c2hs
   build-depends:       base >=4.6 && < 5
-                     , containers 
-                     , unix
                      , bytestring
+                     , containers 
                      , temporary
+                     , unix
   exposed-modules:
     Haskakafka
     Haskakafka.Internal
@@ -44,7 +44,8 @@ test-suite tests
   HS-Source-Dirs: tests
   ghc-options: -Wall -threaded
   build-depends:  base >=4.6 && < 5
-                , hspec
                 , bytestring
+                , containers
                 , haskakafka
+                , hspec
                 , regex-posix

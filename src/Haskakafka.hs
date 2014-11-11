@@ -20,6 +20,7 @@ module Haskakafka
  , hPrintKafkaProperties
  , hPrintKafka
  , newKafkaConf
+ , setKafkaConfValue
  , dumpKafkaConf
  , newKafkaTopicConf
  , newKafka
@@ -59,6 +60,9 @@ data KafkaError =
   | KafkaInvalidReturnValue
   | KafkaBadSpecification String
   | KafkaResponseError RdKafkaRespErrT
+  | KafkaInvalidConfigurationValue String
+  | KafkaUnknownConfigurationKey String
+  | KakfaBadConfiguration
     deriving (Eq, Show, Typeable)
 
 instance Exception KafkaError
@@ -121,6 +125,20 @@ newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
 
 newKafkaConf :: IO KafkaConf
 newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
+
+setKafkaConfValue :: KafkaConf -> String -> String -> IO ()
+setKafkaConfValue (KafkaConf confPtr) key value = do
+  allocaBytes nErrorBytes $ \charPtr -> do
+    err <- rdKafkaConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
+    case err of 
+      RdKafkaConfOk -> return ()
+      RdKafkaConfInvalid -> do 
+        str <- peekCString charPtr
+        throw $ KafkaInvalidConfigurationValue str
+      RdKafkaConfUnknown -> do
+        str <- peekCString charPtr
+        throw $ KafkaUnknownConfigurationKey str
+      _ -> throw KakfaBadConfiguration
 
 newKafka :: KafkaType -> KafkaConf -> IO Kafka
 newKafka kafkaType (KafkaConf confPtr) = do

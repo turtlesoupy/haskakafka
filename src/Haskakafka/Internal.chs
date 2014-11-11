@@ -35,6 +35,10 @@ rdKafkaMsgFlagFree = 0x1
 rdKafkaMsgFlagCopy :: RdKafkaMsgFlag
 rdKafkaMsgFlagCopy = 0x2
 
+-- Number of bytes allocated for an error buffer
+nErrorBytes ::  Int
+nErrorBytes = 1024 * 8
+
 -- Helper functions
 {#fun pure unsafe rd_kafka_version as ^
     {} -> `Int' #}
@@ -194,6 +198,10 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
 {#fun unsafe rd_kafka_conf_dup as ^
     {`RdKafkaConfTPtr'} -> `RdKafkaConfTPtr' #}
 
+{#fun unsafe rd_kafka_conf_set as ^
+  {`RdKafkaConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'} 
+  -> `RdKafkaConfResT' cIntToEnum #}
+
 newRdKafkaConfT :: IO RdKafkaConfTPtr
 newRdKafkaConfT = do
     ret <- rdKafkaConfNew
@@ -234,9 +242,6 @@ newRdKafkaTopicConfT = do
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
     rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
-
-nErrorBytes ::  Int
-nErrorBytes = 1024 * 8
 
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr = 
