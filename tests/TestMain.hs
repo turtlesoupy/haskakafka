@@ -1,11 +1,18 @@
 module Main (main) where
 import Haskakafka
+
+import Control.Concurrent
+import Data.Either.Unwrap
 import Test.Hspec
 import Text.Regex.Posix
+
 import qualified Data.Map as Map
+import qualified Data.ByteString.Char8 as C8
 
 brokerAddress :: String
 brokerAddress = "localhost:9092"
+brokerTopic :: String
+brokerTopic = "haskakafka_tests"
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -62,6 +69,20 @@ testmain = hspec $ do
       (setKafkaTopicConfValue kConf "request.timeout.ms" "mono...doh!") `shouldThrow`
         (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
+  describe "Consume and produce cycle" $ do
+    it "should be able to produce and consume a unkeyed message off of the broker" $ do
+
+      let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
+      withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
+        withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do 
+          produceMessage producerTopic (KafkaSpecifiedPartition 0) message
+        
+        threadDelay $ 2500 * 1000
+
+        et <- consumeMessage topic 0 (1000 * 1000)
+
+        (messagePayload $ fromRight et) `shouldBe` (C8.pack "hey hey we're the monkeys")
+        
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
 checkForKafka = do
@@ -82,33 +103,3 @@ main = do
     \*Haskakafka's tests require an operable Kafka broker running on localhost:9092*\n\
     \*please follow the guide in Readme.md to set this up                          *\n\
     \*******************************************************************************\n"
-
---doConsume :: IO ()
---doConsume = do
---    kConf <- newKafkaConf
---    kafka <- newKafka KafkaConsumer kConf
---    addBrokers kafka "localhost:9092"
---    kTopicConf <- newKafkaTopicConf
---    topic <- newKafkaTopic kafka "test" kTopicConf
---
---    startConsuming topic 0 (KafkaOffsetBeginning)
---    _ <- forever $ do
---          m <- consumeMessage topic 0 (1000 * 1000)
---          print m
---    stopConsuming topic 0
---
---doProduce :: IO ()
---doProduce = do
---    kConf <- newKafkaConf
---    kafka <- newKafka KafkaProducer kConf
---    addBrokers kafka "localhost:9092"
---    kTopicConf <- newKafkaTopicConf
---    topic <- newKafkaTopic kafka "test" kTopicConf
---    let me = KafkaMessage 0 0 (BS.pack "hi") Nothing
---    err <- produceMessage topic me
---
---    drainOutQueue kafka
---            
---    print err
---
---

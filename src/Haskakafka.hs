@@ -37,6 +37,8 @@ module Haskakafka
  , drainOutQueue
  , getAllMetadata
  , getTopicMetadata
+ , withKafkaProducer
+ , withKafkaConsumer
  , module Haskakafka.InternalEnum
 ) where
 
@@ -185,7 +187,6 @@ word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
 word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
     BSI.memcpy bsptr ptr len
     
-
 consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage)
 consumeMessage (KafkaTopic topicPtr _) partition timeout = do
     ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
@@ -277,6 +278,46 @@ produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
                 , keyLen'RdKafkaMessageT = keyLength
                 , key'RdKafkaMessageT = keyPtr
                 }
+
+type ConfigOverrides = [(String, String)]
+withKafkaProducer :: ConfigOverrides -> ConfigOverrides 
+                     -> String -> String 
+                     -> (Kafka -> KafkaTopic -> IO a) 
+                     -> IO a
+withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
+  bracket 
+    (do
+      conf <- newKafkaConf
+      mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
+      kafka <- newKafka KafkaProducer conf
+      addBrokers kafka brokerString
+      topicConf <- newKafkaTopicConf
+      mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
+      topic <- newKafkaTopic kafka tName topicConf
+      return (kafka, topic)
+    )
+    (\(kafka, _) -> drainOutQueue kafka)
+    (\(k, t) -> cb k t)
+
+withKafkaConsumer :: ConfigOverrides -> ConfigOverrides 
+                     -> String -> String -> Int -> KafkaOffset 
+                     -> (Kafka -> KafkaTopic -> IO a) 
+                     -> IO a
+withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partition offset cb =
+  bracket
+    (do
+      conf <- newKafkaConf
+      mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
+      kafka <- newKafka KafkaConsumer conf
+      addBrokers kafka brokerString
+      topicConf <- newKafkaTopicConf
+      mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
+      topic <- newKafkaTopic kafka tName topicConf
+      startConsuming topic partition offset
+      return (kafka, topic)
+    )
+    (\(_, topic) -> stopConsuming topic partition)
+    (\(k, t) -> cb k t)
 
 {-# INLINE copyMsgFlags  #-}
 copyMsgFlags :: Int
