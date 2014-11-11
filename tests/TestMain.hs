@@ -39,6 +39,28 @@ testmain = hspec $ do
       kConf <- newKafkaConf
       (setKafkaConfValue kConf "socket.timeout.ms" "monorail") `shouldThrow`
         (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
+  
+  describe "Kafka topic configuration" $ do
+    it "should allow dumping" $ do
+      kConf <- newKafkaTopicConf
+      kvs <- dumpKafkaTopicConf kConf
+      (Map.size kvs) `shouldSatisfy` (>0)
+
+    it "should change when set is called" $ do
+      kConf <- newKafkaTopicConf
+      setKafkaTopicConfValue kConf "request.timeout.ms" "20000"
+      kvs <- dumpKafkaTopicConf kConf
+      (kvs Map.! "request.timeout.ms") `shouldBe` "20000"
+
+    it "should throw an exception on unknown property" $ do
+      kConf <- newKafkaTopicConf
+      (setKafkaTopicConfValue kConf "blippity.blop.cosby" "120") `shouldThrow`
+        (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
+
+    it "should throw an exception on an invalid value" $ do
+      kConf <- newKafkaTopicConf
+      (setKafkaTopicConfValue kConf "request.timeout.ms" "mono...doh!") `shouldThrow`
+        (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)

@@ -21,6 +21,7 @@ module Haskakafka
  , hPrintKafka
  , newKafkaConf
  , setKafkaConfValue
+ , setKafkaTopicConfValue
  , dumpKafkaConf
  , newKafkaTopicConf
  , newKafka
@@ -126,19 +127,29 @@ newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
 newKafkaConf :: IO KafkaConf
 newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
 
+checkConfSetValue :: RdKafkaConfResT -> CCharBufPointer -> IO ()
+checkConfSetValue err charPtr = case err of 
+    RdKafkaConfOk -> return ()
+    RdKafkaConfInvalid -> do 
+      str <- peekCString charPtr
+      throw $ KafkaInvalidConfigurationValue str
+    RdKafkaConfUnknown -> do
+      str <- peekCString charPtr
+      throw $ KafkaUnknownConfigurationKey str
+    _ -> throw KakfaBadConfiguration
+
 setKafkaConfValue :: KafkaConf -> String -> String -> IO ()
 setKafkaConfValue (KafkaConf confPtr) key value = do
   allocaBytes nErrorBytes $ \charPtr -> do
     err <- rdKafkaConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
-    case err of 
-      RdKafkaConfOk -> return ()
-      RdKafkaConfInvalid -> do 
-        str <- peekCString charPtr
-        throw $ KafkaInvalidConfigurationValue str
-      RdKafkaConfUnknown -> do
-        str <- peekCString charPtr
-        throw $ KafkaUnknownConfigurationKey str
-      _ -> throw KakfaBadConfiguration
+    checkConfSetValue err charPtr
+
+setKafkaTopicConfValue :: KafkaTopicConf -> String -> String -> IO ()
+setKafkaTopicConfValue (KafkaTopicConf confPtr) key value = do
+  allocaBytes nErrorBytes $ \charPtr -> do
+    err <- rdKafkaTopicConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
+    checkConfSetValue err charPtr
+
 
 newKafka :: KafkaType -> KafkaConf -> IO Kafka
 newKafka kafkaType (KafkaConf confPtr) = do

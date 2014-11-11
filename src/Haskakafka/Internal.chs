@@ -226,6 +226,10 @@ newRdKafkaConfT = do
 foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
     rdKafkaTopicConfDestroy :: FunPtr (Ptr RdKafkaTopicConfT -> IO ())
 
+{#fun unsafe rd_kafka_topic_conf_set as ^
+  {`RdKafkaTopicConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'} 
+  -> `RdKafkaConfResT' cIntToEnum #}
+
 newRdKafkaTopicConfT :: IO RdKafkaTopicConfTPtr
 newRdKafkaTopicConfT = do
     ret <- rdKafkaTopicConfNew
