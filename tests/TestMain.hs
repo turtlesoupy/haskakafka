@@ -1,6 +1,7 @@
 module Main (main) where
 import Haskakafka
 
+import Control.Monad
 import Test.Hspec
 import Text.Regex.Posix
 
@@ -104,6 +105,29 @@ testmain = hspec $ do
           Right m -> do
             (messageKey m) `shouldBe` (Just $ C8.pack "key")
             (messagePayload m) `shouldBe` (C8.pack "monkey around") 
+
+    it "should be able to batch produce messages" $ do
+      let messages = [ (KafkaProduceMessage $ C8.pack "hello")
+                     , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
+                     , (KafkaProduceMessage $ C8.pack "goodbye")
+                     ]
+      withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
+        eof <- consumeMessage topic 0 kafkaProduceDelay
+        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+        errs <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) messages
+        errs `shouldBe` []
+
+        ets <- mapM (\_ -> consumeMessage topic 0 kafkaProduceDelay) ([1..3] :: [Integer])
+
+        forM_ (zip messages ets) $ \(pm, et) -> 
+          case (pm, et) of
+            (_, Left err) -> error $ show err
+            (KafkaProduceMessage ppayload, Right m) -> ppayload `shouldBe` (messagePayload m)
+            (KafkaProduceKeyedMessage pkey pvalue, Right m) -> do
+              pvalue `shouldBe` (messagePayload m)
+              (Just pkey) `shouldBe` (messageKey m)
+              
         
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)

@@ -100,12 +100,11 @@ data KafkaOffset = KafkaOffsetBeginning
 data KafkaType = KafkaConsumer | KafkaProducer
 data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
 data KafkaTopic = KafkaTopic 
-  { kafkaTopicPtr :: RdKafkaTopicTPtr 
-  , owningKafka :: Kafka -- prevents garbage collection 
-  } 
+    RdKafkaTopicTPtr  
+    Kafka -- Kept around to prevent garbage collection 
 
-data KafkaConf = KafkaConf {kafkaConfPtr :: RdKafkaConfTPtr}
-data KafkaTopicConf = KafkaTopicConf {kafkaTopicConfPtr :: RdKafkaTopicConfTPtr}
+data KafkaConf = KafkaConf RdKafkaConfTPtr
+data KafkaTopicConf = KafkaTopicConf RdKafkaTopicConfTPtr
 
 kafkaTypeToRdKafkaType :: KafkaType -> RdKafkaTypeT
 kafkaTypeToRdKafkaType KafkaConsumer = RdKafkaConsumer
@@ -139,7 +138,6 @@ checkConfSetValue err charPtr = case err of
     RdKafkaConfUnknown -> do
       str <- peekCString charPtr
       throw $ KafkaUnknownConfigurationKey str
-    _ -> throw KakfaBadConfiguration
 
 setKafkaConfValue :: KafkaConf -> String -> String -> IO ()
 setKafkaConfValue (KafkaConf confPtr) key value = do
@@ -221,7 +219,10 @@ produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) =
             copyMsgFlags passedPayload (fromIntegral payloadLength)
             nullPtr (CSize 0) nullPtr
 
+produceMessage _ _ (KafkaProduceKeyedMessage _ _) = undefined
+
 produceKeyedMessage :: KafkaTopic -> KafkaProduceMessage -> IO (Maybe KafkaError)
+produceKeyedMessage _ (KafkaProduceMessage _) = undefined
 produceKeyedMessage (KafkaTopic topicPtr _) (KafkaProduceKeyedMessage key payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
         (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr key
@@ -262,7 +263,7 @@ produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
               , keyLen'RdKafkaMessageT = 0
               , key'RdKafkaMessageT = nullPtr
               }
-    produceMessageToMessage (KafkaProduceKeyedMessage bs kbs) =  do
+    produceMessageToMessage (KafkaProduceKeyedMessage kbs bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
             (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr kbs
              
@@ -278,7 +279,7 @@ produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
                 , payload'RdKafkaMessageT = passedPayload
                 , offset'RdKafkaMessageT = 0
                 , keyLen'RdKafkaMessageT = keyLength
-                , key'RdKafkaMessageT = keyPtr
+                , key'RdKafkaMessageT = passedKey
                 }
 
 type ConfigOverrides = [(String, String)]
