@@ -32,6 +32,7 @@ module Haskakafka
  , consumeMessage
  , stopConsuming
  , produceMessage
+ , produceKeyedMessage
  , produceMessageBatch
  , pollEvents
  , drainOutQueue
@@ -220,7 +221,8 @@ produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) =
             copyMsgFlags passedPayload (fromIntegral payloadLength)
             nullPtr (CSize 0) nullPtr
 
-produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceKeyedMessage key payload) = do
+produceKeyedMessage :: KafkaTopic -> KafkaProduceMessage -> IO (Maybe KafkaError)
+produceKeyedMessage (KafkaTopic topicPtr _) (KafkaProduceKeyedMessage key payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
         (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr key
 
@@ -230,7 +232,7 @@ produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceKeyedMessage key p
               passedKey = keyPtr `plusPtr` keyOffset
 
           handleProduceErr =<< 
-            rdKafkaProduce topicPtr (producePartitionInteger partition)
+            rdKafkaProduce topicPtr (producePartitionInteger KafkaUnassignedPartition)
               copyMsgFlags passedPayload (fromIntegral payloadLength)
               passedKey (fromIntegral keyLength) nullPtr
 

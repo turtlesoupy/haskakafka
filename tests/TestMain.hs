@@ -1,8 +1,6 @@
 module Main (main) where
 import Haskakafka
 
-import Control.Concurrent
-import Data.Either.Unwrap
 import Test.Hspec
 import Text.Regex.Posix
 
@@ -13,6 +11,8 @@ brokerAddress :: String
 brokerAddress = "localhost:9092"
 brokerTopic :: String
 brokerTopic = "haskakafka_tests"
+kafkaProduceDelay :: Int -- Little delay so that the broker can queue the message
+kafkaProduceDelay = 5 * 1000 *  1000
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -74,14 +74,36 @@ testmain = hspec $ do
 
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
       withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
-        withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do 
-          produceMessage producerTopic (KafkaSpecifiedPartition 0) message
+        eof <- consumeMessage topic 0 kafkaProduceDelay
+        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+        perr <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do 
+                produceMessage producerTopic (KafkaSpecifiedPartition 0) message
+        perr `shouldBe` Nothing
         
-        threadDelay $ 2500 * 1000
+        et <- consumeMessage topic 0 kafkaProduceDelay
+        case et of 
+          Left err -> error $ show err
+          Right m -> do
+            (messageKey m) `shouldBe` Nothing
+            (messagePayload $ m) `shouldBe` (C8.pack "hey hey we're the monkeys")
 
-        et <- consumeMessage topic 0 (1000 * 1000)
+    it "should be able to produce and consume a keyed message" $ do
+      let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
 
-        (messagePayload $ fromRight et) `shouldBe` (C8.pack "hey hey we're the monkeys")
+      withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
+        eof <- consumeMessage topic 0 kafkaProduceDelay
+        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+
+        perr <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
+                  produceKeyedMessage producerTopic message
+        perr `shouldBe` Nothing
+
+        et <- consumeMessage topic 0 kafkaProduceDelay
+        case et of
+          Left err -> error $ show err
+          Right m -> do
+            (messageKey m) `shouldBe` (Just $ C8.pack "key")
+            (messagePayload m) `shouldBe` (C8.pack "monkey around") 
         
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
