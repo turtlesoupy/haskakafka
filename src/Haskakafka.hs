@@ -44,6 +44,8 @@ module Haskakafka
  , getTopicMetadata
  , withKafkaProducer
  , withKafkaConsumer
+ , dumpConfFromKafkaTopic
+ , dumpConfFromKafka
  , module Haskakafka.InternalEnum
 ) where
 
@@ -125,14 +127,16 @@ data KafkaOffset = KafkaOffsetBeginning
                  | KafkaOffsetStored
                  | KafkaOffset Int64
 
+data KafkaConf = KafkaConf RdKafkaConfTPtr
+data KafkaTopicConf = KafkaTopicConf RdKafkaTopicConfTPtr
+
 data KafkaType = KafkaConsumer | KafkaProducer
-data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr}
+data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr, _kafkaConf :: KafkaConf}
 data KafkaTopic = KafkaTopic 
     RdKafkaTopicTPtr  
     Kafka -- Kept around to prevent garbage collection 
+    KafkaTopicConf
 
-data KafkaConf = KafkaConf RdKafkaConfTPtr
-data KafkaTopicConf = KafkaTopicConf RdKafkaTopicConfTPtr
 
 kafkaTypeToRdKafkaType :: KafkaType -> RdKafkaTypeT
 kafkaTypeToRdKafkaType KafkaConsumer = RdKafkaConsumer
@@ -180,31 +184,31 @@ setKafkaTopicConfValue (KafkaTopicConf confPtr) key value = do
     checkConfSetValue err charPtr
 
 setKafkaLogLevel :: Kafka -> KafkaLogLevel -> IO ()
-setKafkaLogLevel (Kafka kptr) level = 
+setKafkaLogLevel (Kafka kptr _) level = 
   rdKafkaSetLogLevel kptr (fromEnum level)
 
 newKafka :: KafkaType -> KafkaConf -> IO Kafka
-newKafka kafkaType (KafkaConf confPtr) = do
+newKafka kafkaType c@(KafkaConf confPtr) = do
     et <- newRdKafkaT (kafkaTypeToRdKafkaType kafkaType) confPtr 
     case et of 
         Left e -> error e
-        Right x -> return $ Kafka x
+        Right x -> return $ Kafka x c
 
 newKafkaTopic :: Kafka -> String -> KafkaTopicConf -> IO (KafkaTopic)
-newKafkaTopic k@(Kafka kPtr) tName (KafkaTopicConf confPtr) = do
+newKafkaTopic k@(Kafka kPtr _) tName conf@(KafkaTopicConf confPtr) = do
     et <- newRdKafkaTopicT kPtr tName confPtr
     case et of 
         Left e -> throw $ KafkaError e
-        Right x -> return $ KafkaTopic x k
+        Right x -> return $ KafkaTopic x k conf
 
 addBrokers :: Kafka -> String -> IO ()
-addBrokers (Kafka kptr) brokerStr = do
+addBrokers (Kafka kptr _) brokerStr = do
     numBrokers <- rdKafkaBrokersAdd kptr brokerStr
     when (numBrokers == 0) 
         (throw $ KafkaBadSpecification "No valid brokers specified")
 
 startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
-startConsuming (KafkaTopic topicPtr _) partition offset = 
+startConsuming (KafkaTopic topicPtr _ _) partition offset = 
     let trueOffset = case offset of
                         KafkaOffsetBeginning -> (- 2)
                         KafkaOffsetEnd -> (- 1)
@@ -232,7 +236,7 @@ fromMessageStorable s = do
              key 
 
 consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage)
-consumeMessage (KafkaTopic topicPtr _) partition timeout = do
+consumeMessage (KafkaTopic topicPtr _ _) partition timeout = do
   ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
   withForeignPtr ptr $ \realPtr ->
     if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr 
@@ -253,7 +257,7 @@ consumeMessage (KafkaTopic topicPtr _) partition timeout = do
                 key 
 
 consumeMessageBatch :: KafkaTopic -> Int -> Int -> Int -> IO (Either KafkaError [KafkaMessage])
-consumeMessageBatch (KafkaTopic topicPtr _) partition timeout maxMessages = 
+consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages = 
   allocaArray maxMessages $ \outputPtr -> do
     numMessages <- rdKafkaConsumeBatch topicPtr (fromIntegral partition) timeout outputPtr (fromIntegral maxMessages)
     if numMessages < 0 then getErrno >>= return . Left . kafkaRespErr
@@ -268,14 +272,14 @@ consumeMessageBatch (KafkaTopic topicPtr _) partition timeout maxMessages =
       return $ Right ms 
 
 storeOffset :: KafkaTopic -> Int -> Int -> IO (Maybe KafkaError)
-storeOffset (KafkaTopic topicPtr _) partition offset = do
+storeOffset (KafkaTopic topicPtr _ _) partition offset = do
   err <- rdKafkaOffsetStore topicPtr (fromIntegral partition) (fromIntegral offset)
   case err of 
     RdKafkaRespErrNoError -> return Nothing
     e -> return $ Just $ KafkaResponseError e
 
 produceMessage :: KafkaTopic -> KafkaProducePartition -> KafkaProduceMessage -> IO (Maybe KafkaError)
-produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) = do
+produceMessage (KafkaTopic topicPtr _ _) partition (KafkaProduceMessage payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
 
     withForeignPtr payloadFPtr $ \payloadPtr -> do
@@ -290,7 +294,7 @@ produceMessage _ _ (KafkaProduceKeyedMessage _ _) = undefined
 
 produceKeyedMessage :: KafkaTopic -> KafkaProduceMessage -> IO (Maybe KafkaError)
 produceKeyedMessage _ (KafkaProduceMessage _) = undefined
-produceKeyedMessage (KafkaTopic topicPtr _) (KafkaProduceKeyedMessage key payload) = do
+produceKeyedMessage (KafkaTopic topicPtr _ _) (KafkaProduceKeyedMessage key payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
         (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr key
 
@@ -305,7 +309,7 @@ produceKeyedMessage (KafkaTopic topicPtr _) (KafkaProduceKeyedMessage key payloa
               passedKey (fromIntegral keyLength) nullPtr
 
 produceMessageBatch :: KafkaTopic -> KafkaProducePartition -> [KafkaProduceMessage] -> IO ([(KafkaProduceMessage, KafkaError)])
-produceMessageBatch (KafkaTopic topicPtr _) partition pms = do
+produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
   storables <- forM pms produceMessageToMessage
   withArray storables $ \batchPtr -> do
     batchPtrF <- newForeignPtr_ batchPtr
@@ -443,9 +447,9 @@ getTopicMetadata k kt timeout = do
       _ -> return $ Left $ KafkaError "Incorrect number of topics returned"
 
 getMetadata :: Kafka -> Maybe KafkaTopic -> Int -> IO (Either KafkaError KafkaMetadata)
-getMetadata (Kafka kPtr) mTopic timeout = alloca $ \mdDblPtr -> do
+getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
     err <- case mTopic of  
-      Just (KafkaTopic kTopicPtr _) -> 
+      Just (KafkaTopic kTopicPtr _ _) -> 
         rdKafkaMetadata kPtr False kTopicPtr mdDblPtr timeout
       Nothing -> do
         nullTopic <- newForeignPtr_ nullPtr
@@ -506,10 +510,10 @@ getMetadata (Kafka kPtr) mTopic timeout = alloca $ \mdDblPtr -> do
           e -> return $ Left $ KafkaResponseError e
 
 pollEvents :: Kafka -> Int -> IO ()
-pollEvents (Kafka kPtr) timeout = rdKafkaPoll kPtr timeout >> return ()
+pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
 
 outboundQueueLength :: Kafka -> IO (Int)
-outboundQueueLength (Kafka kPtr) = rdKafkaOutqLen kPtr
+outboundQueueLength (Kafka kPtr _) = rdKafkaOutqLen kPtr
 
 drainOutQueue :: Kafka -> IO ()
 drainOutQueue k = do
@@ -522,7 +526,7 @@ kafkaRespErr :: Errno -> KafkaError
 kafkaRespErr (Errno num) = KafkaResponseError $ rdKafkaErrno2err (fromIntegral num)
 
 stopConsuming :: KafkaTopic -> Int -> IO ()
-stopConsuming (KafkaTopic topicPtr _) partition = 
+stopConsuming (KafkaTopic topicPtr _ _) partition = 
     throwOnError $ rdKafkaConsumeStop topicPtr partition
 
 throwOnError :: IO (Maybe String) -> IO ()
@@ -540,6 +544,13 @@ dumpKafkaTopicConf (KafkaTopicConf kptr) =
 dumpKafkaConf :: KafkaConf -> IO (Map String String)
 dumpKafkaConf (KafkaConf kptr) = do
     parseDump (\sizeptr -> rdKafkaConfDump kptr sizeptr)
+
+dumpConfFromKafka :: Kafka -> IO (Map String String) 
+dumpConfFromKafka (Kafka _ cfg) = dumpKafkaConf cfg
+
+dumpConfFromKafkaTopic :: KafkaTopic -> IO (Map String String)
+dumpConfFromKafkaTopic (KafkaTopic _ _ conf) = dumpKafkaTopicConf conf
+
 
 parseDump :: (CSizePtr -> IO (Ptr CString)) -> IO (Map String String)
 parseDump cstr = alloca $ \sizeptr -> do

@@ -348,7 +348,6 @@ newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
             addForeignPtrFinalizer rdKafkaTopicDestroy ret
             return $ Right ret
 
-
 -- Marshall / Unmarshall
 enumToCInt :: Enum a => a -> CInt
 enumToCInt = fromIntegral . fromEnum
