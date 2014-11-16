@@ -186,6 +186,10 @@ instance Storable RdKafkaMetadataT where
 
 {#pointer *rd_kafka_metadata_t as RdKafkaMetadataTPtr foreign -> RdKafkaMetadataT #}
 
+-- rd_kafka_message
+foreign import ccall unsafe "rdkafka.h &rd_kafka_message_destroy"
+    rdKafkaMessageDestroy :: FunPtr (Ptr RdKafkaMessageT -> IO ())
+
 -- rd_kafka_conf
 {#fun unsafe rd_kafka_conf_new as ^
     {} -> `RdKafkaConfTPtr' #}
@@ -259,6 +263,8 @@ newRdKafkaT kafkaType confPtr =
 {#fun unsafe rd_kafka_brokers_add as ^
     {`RdKafkaTPtr', `String'} -> `Int' #}
 
+-- rd_kafka consume
+
 {#fun unsafe rd_kafka_consume_start as rdKafkaConsumeStartInternal
     {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T'} -> `Int' #}
 
@@ -278,9 +284,6 @@ rdKafkaConsumeStart topicPtr partition offset = do
   {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Ptr (Ptr RdKafkaMessageT)', cIntConv `CSize'}
   -> `CSize' cIntConv #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_message_destroy"
-    rdKafkaMessageDestroy :: FunPtr (Ptr RdKafkaMessageT -> IO ())
-
 rdKafkaConsumeStop :: RdKafkaTopicTPtr -> Int -> IO (Maybe String)
 rdKafkaConsumeStop topicPtr partition = do
     i <- rdKafkaConsumeStopInternal topicPtr (fromIntegral partition)
@@ -288,6 +291,11 @@ rdKafkaConsumeStop topicPtr partition = do
         -1 -> kafkaErrnoString >>= return . Just
         _ -> return Nothing
 
+{#fun unsafe rd_kafka_offset_store as rdKafkaOffsetStore
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T'} 
+  -> `RdKafkaRespErrT' cIntToEnum #}
+
+-- rd_kafka produce
 
 {#fun unsafe rd_kafka_produce as ^
     {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Word8Ptr', 
@@ -299,6 +307,8 @@ rdKafkaConsumeStop topicPtr partition = do
 
 castMetadata :: Ptr (Ptr RdKafkaMetadataT) -> Ptr (Ptr ())
 castMetadata ptr = castPtr ptr
+
+-- rd_kafka_metadata
 
 {#fun unsafe rd_kafka_metadata as ^
    {`RdKafkaTPtr', boolToCInt `Bool', `RdKafkaTopicTPtr', 

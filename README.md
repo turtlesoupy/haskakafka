@@ -7,6 +7,12 @@ keyed/unkeyed producers and consumers with optional batch operations.
 
 # Usage 
 
+
+## Configuration Options
+Configuration options are set in the call to `withKafkaConsumer` and `withKafkaProducer`. For
+the full list of supported options, see 
+[librdkafka's list](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
+
 # Installation
 
 ## Installing librdkafka

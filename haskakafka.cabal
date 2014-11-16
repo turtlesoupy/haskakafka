@@ -48,3 +48,4 @@ test-suite tests
                 , haskakafka
                 , hspec
                 , regex-posix
+                , either-unwrap

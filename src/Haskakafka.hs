@@ -31,6 +31,7 @@ module Haskakafka
  , startConsuming
  , consumeMessage
  , consumeMessageBatch
+ , storeOffset
  , stopConsuming
  , produceMessage
  , produceKeyedMessage
@@ -176,9 +177,9 @@ addBrokers (Kafka kptr) brokerStr = do
 startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
 startConsuming (KafkaTopic topicPtr _) partition offset = 
     let trueOffset = case offset of
-                        KafkaOffsetBeginning -> -2
-                        KafkaOffsetEnd -> -1
-                        KafkaOffsetStored -> -1000
+                        KafkaOffsetBeginning -> (- 2)
+                        KafkaOffsetEnd -> (- 1)
+                        KafkaOffsetStored -> (- 1000)
                         KafkaOffset i -> i
     in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
 
@@ -236,6 +237,13 @@ consumeMessageBatch (KafkaTopic topicPtr _) partition timeout maxMessages =
               addForeignPtrFinalizer rdKafkaMessageDestroy fptr
               return ret
       return $ Right ms 
+
+storeOffset :: KafkaTopic -> Int -> Int -> IO (Maybe KafkaError)
+storeOffset (KafkaTopic topicPtr _) partition offset = do
+  err <- rdKafkaOffsetStore topicPtr (fromIntegral partition) (fromIntegral offset)
+  case err of 
+    RdKafkaRespErrNoError -> return Nothing
+    e -> return $ Just $ KafkaResponseError e
 
 produceMessage :: KafkaTopic -> KafkaProducePartition -> KafkaProduceMessage -> IO (Maybe KafkaError)
 produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) = do

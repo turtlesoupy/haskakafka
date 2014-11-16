@@ -141,7 +141,7 @@ testmain = hspec $ do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
-        et <- consumeMessageBatch topic 0 (1000) 5
+        et <- consumeMessageBatch topic 0 (1000) 3
         case et of 
           (Left err) -> error $ show err
           (Right oms) -> do
