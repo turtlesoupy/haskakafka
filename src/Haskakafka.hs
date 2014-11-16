@@ -30,6 +30,7 @@ module Haskakafka
  , addBrokers
  , startConsuming
  , consumeMessage
+ , consumeMessageBatch
  , stopConsuming
  , produceMessage
  , produceKeyedMessage
@@ -186,26 +187,55 @@ word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
 word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
     BSI.memcpy bsptr ptr len
     
+
+fromMessageStorable :: RdKafkaMessageT -> IO (KafkaMessage)
+fromMessageStorable s = do
+    payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+
+    key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+           else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
+
+    return $ KafkaMessage
+             (partition'RdKafkaMessageT s) 
+             (offset'RdKafkaMessageT s)
+             payload
+             key 
+
 consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage)
 consumeMessage (KafkaTopic topicPtr _) partition timeout = do
-    ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
-    withForeignPtr ptr $ \realPtr ->
-        if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr 
+  ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
+  withForeignPtr ptr $ \realPtr ->
+    if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr 
+    else do
+        addForeignPtrFinalizer rdKafkaMessageDestroy ptr
+        s <- peek realPtr
+        if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaResponseError $ err'RdKafkaMessageT s
         else do
-            addForeignPtrFinalizer rdKafkaMessageDestroy ptr
-            s <- peek realPtr
-            if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaResponseError $ err'RdKafkaMessageT s
-            else do
-                payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
 
-                key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
-                       else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
+            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+                   else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
 
-                return $ Right $ KafkaMessage
-                    (partition'RdKafkaMessageT s) 
-                    (offset'RdKafkaMessageT s)
-                    payload
-                    key 
+            return $ Right $ KafkaMessage
+                (partition'RdKafkaMessageT s) 
+                (offset'RdKafkaMessageT s)
+                payload
+                key 
+
+consumeMessageBatch :: KafkaTopic -> Int -> Int -> Int -> IO (Either KafkaError [KafkaMessage])
+consumeMessageBatch (KafkaTopic topicPtr _) partition timeout maxMessages = 
+  allocaArray maxMessages $ \outputPtr -> do
+    numMessages <- rdKafkaConsumeBatch topicPtr (fromIntegral partition) timeout outputPtr (fromIntegral maxMessages)
+    if numMessages < 0 then getErrno >>= return . Left . kafkaRespErr
+    else do
+      ms <- forM [0..(numMessages - 1)] $ \mnum -> do 
+              storablePtr <- peekElemOff outputPtr (fromIntegral mnum)
+              storable <- peek storablePtr
+              ret <- fromMessageStorable storable
+              fptr <- newForeignPtr_ storablePtr
+              addForeignPtrFinalizer rdKafkaMessageDestroy fptr
+              return ret
+      return $ Right ms 
 
 produceMessage :: KafkaTopic -> KafkaProducePartition -> KafkaProduceMessage -> IO (Maybe KafkaError)
 produceMessage (KafkaTopic topicPtr _) partition (KafkaProduceMessage payload) = do

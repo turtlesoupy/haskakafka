@@ -16,8 +16,6 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.IO
 import System.Posix.Types
 
-import qualified Data.Map.Strict as Map
-
 #include "rdkafka.h"
 
 type CInt64T = {#type int64_t #}
@@ -274,7 +272,11 @@ rdKafkaConsumeStart topicPtr partition offset = do
     {`RdKafkaTopicTPtr', cIntConv `CInt32T'} -> `Int' #}
 
 {#fun unsafe rd_kafka_consume as ^
-    {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int'} -> `RdKafkaMessageTPtr' #}
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int'} -> `RdKafkaMessageTPtr' #}
+
+{#fun unsafe rd_kafka_consume_batch as ^
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Ptr (Ptr RdKafkaMessageT)', cIntConv `CSize'}
+  -> `CSize' cIntConv #}
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_message_destroy"
     rdKafkaMessageDestroy :: FunPtr (Ptr RdKafkaMessageT -> IO ())

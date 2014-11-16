@@ -127,6 +127,30 @@ testmain = hspec $ do
             (KafkaProduceKeyedMessage pkey pvalue, Right m) -> do
               pvalue `shouldBe` (messagePayload m)
               (Just pkey) `shouldBe` (messageKey m)
+
+    it "should be able to batch consume messages" $ do
+      let messages = [ (KafkaProduceMessage $ C8.pack "hello")
+                     , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
+                     , (KafkaProduceMessage $ C8.pack "goodbye")
+                     ]
+      withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
+        eof <- consumeMessage topic 0 kafkaProduceDelay
+        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+        errs <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) messages
+        errs `shouldBe` []
+
+        et <- consumeMessageBatch topic 0 (1000) 5
+        case et of 
+          (Left err) -> error $ show err
+          (Right oms) -> do
+            (length oms) `shouldBe` 3
+            forM_ (zip messages oms) $ \(pm, om) -> 
+              case (pm, om) of
+                (KafkaProduceMessage ppayload, m) -> ppayload `shouldBe` (messagePayload m)
+                (KafkaProduceKeyedMessage pkey pvalue, m) -> do
+                  pvalue `shouldBe` (messagePayload m)
+                  (Just pkey) `shouldBe` (messageKey m)
               
         
 -- Test setup (error on no Kafka)
