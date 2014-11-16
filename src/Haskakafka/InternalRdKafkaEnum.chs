@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE EmptyDataDecls #-}
 
-module Haskakafka.InternalEnum where
+module Haskakafka.InternalRdKafkaEnum where
 
 #include "rdkafka.h"
 

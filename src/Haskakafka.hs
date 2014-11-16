@@ -46,7 +46,7 @@ module Haskakafka
  , withKafkaConsumer
  , dumpConfFromKafkaTopic
  , dumpConfFromKafka
- , module Haskakafka.InternalEnum
+ , module Haskakafka.InternalRdKafkaEnum
 ) where
 
 import Control.Exception
@@ -57,8 +57,8 @@ import Foreign
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
-import Haskakafka.Internal
-import Haskakafka.InternalEnum
+import Haskakafka.InternalRdKafka
+import Haskakafka.InternalRdKafkaEnum
 import System.IO
 import System.IO.Temp (withSystemTempFile)
 import qualified Data.Map.Strict as Map

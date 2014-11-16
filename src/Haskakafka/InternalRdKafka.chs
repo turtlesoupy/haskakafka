@@ -1,7 +1,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE EmptyDataDecls #-}
 
-module Haskakafka.Internal where
+module Haskakafka.InternalRdKafka where
 
 import Control.Applicative
 import Control.Monad
@@ -10,7 +10,7 @@ import Foreign hiding (unsafePerformIO)
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
-import Haskakafka.InternalEnum
+import Haskakafka.InternalRdKafkaEnum
 import System.IO
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.IO
