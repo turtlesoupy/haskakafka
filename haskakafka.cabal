@@ -1,17 +1,16 @@
 name:                haskakafka
 version:             0.5.0
 synopsis:            Kafka bindings for Haskell
-description:         Use Apache Kafka in Haskell through the librdkafka
-                     C library. 
+description:         Apache Kafka bindings backed by the librdkafka
+                     C library. This implies full consumer and producer 
+                     support for Kafka 0.8.x.
 homepage:            http://github.com/cosbynator/haskakafka
 license:             MIT
 license-file:        LICENSE
 author:              Thomas Dimson <tdimson@cs.stanford.edu>
 maintainer:          Thomas Dimson <tdimson@cs.stanford.edu>
--- copyright:           
 category:            Network
 build-type:          Simple
--- extra-source-files:  
 cabal-version:       >=1.10
 
 source-repository head
