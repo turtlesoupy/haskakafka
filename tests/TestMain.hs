@@ -161,7 +161,7 @@ testmain = hspec $ do
           (Right oms) -> do
             (length oms) `shouldBe` 3
             forM_ (zip sampleProduceMessages oms) $ \(pm, om) -> pm `shouldBeProduceConsume` om
-        
+
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
 checkForKafka = do
