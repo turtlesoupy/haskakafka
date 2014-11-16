@@ -111,6 +111,8 @@ Afterwards installation should work, so go for
 
     cabal install haskakafka
 
+This uses the latest version of Haskakafka from [http://hackage.haskell.org/package/haskakafka](Hackage)
+
 # Testing
 
 Haskakafka ships with a suite of integration tests to verify the library against
