@@ -165,21 +165,19 @@ testmain = hspec $ do
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
 checkForKafka = do
-  kConf <- newKafkaConf 
-  kafka <- newKafka KafkaConsumer kConf
   a <- brokerAddress
-  addBrokers kafka a
-  me <- getAllMetadata kafka 1000
+  me <- fetchBrokerMetadata [] a 1000
   return $ case me of 
     (Left _) -> False
     (Right _) -> True
 
 main :: IO () 
 main = do 
+  a <- brokerAddress
   hasKafka <- checkForKafka 
   if hasKafka then testmain
-  else error "\n\n\
+  else error $ "\n\n\
     \*******************************************************************************\n\
-    \*Haskakafka's tests require an operable Kafka broker running on localhost:9092*\n\
-    \*please follow the guide in Readme.md to set this up                          *\n\
+    \Haskakafka's tests require an operable Kafka broker running on " ++ a ++ "\n\
+    \please follow the guide in Readme.md to set this up                          \n\
     \*******************************************************************************\n"

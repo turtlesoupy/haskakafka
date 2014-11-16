@@ -1,146 +1,74 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 
 module Haskakafka 
-(  Kafka
- , KafkaConf
- , KafkaLogLevel(..)
- , KafkaMessage(..)
- , KafkaOffset(..)
- , KafkaMetadata(..)
- , KafkaBrokerMetadata(..)
- , KafkaTopicMetadata(..)
- , KafkaPartitionMetadata(..)
- , KafkaProduceMessage(..)
- , KafkaProducePartition(..)
- , KafkaTopic
- , KafkaTopicConf
- , KafkaType(..)
- , KafkaError (..)
- , rdKafkaVersionStr
- , supportedKafkaConfProperties
- , hPrintKafkaProperties
- , hPrintKafka
- , newKafkaConf
- , setKafkaConfValue
- , setKafkaTopicConfValue
- , setKafkaLogLevel
- , dumpKafkaConf
- , newKafkaTopicConf
- , newKafka
- , newKafkaTopic
- , dumpKafkaTopicConf
- , addBrokers
- , startConsuming
- , consumeMessage
- , consumeMessageBatch
- , storeOffset
- , stopConsuming
- , produceMessage
- , produceKeyedMessage
- , produceMessageBatch
- , pollEvents
- , drainOutQueue
- , getAllMetadata
- , getTopicMetadata
- , withKafkaProducer
- , withKafkaConsumer
- , dumpConfFromKafkaTopic
- , dumpConfFromKafka
- , module Haskakafka.InternalRdKafkaEnum
+( rdKafkaVersionStr
+, supportedKafkaConfProperties
+, hPrintKafkaProperties
+, hPrintKafka
+, newKafkaConf
+, setKafkaConfValue
+, setKafkaTopicConfValue
+, setKafkaLogLevel
+, dumpKafkaConf
+, newKafkaTopicConf
+, newKafka
+, newKafkaTopic
+, dumpKafkaTopicConf
+, addBrokers
+, startConsuming
+, consumeMessage
+, consumeMessageBatch
+, storeOffset
+, stopConsuming
+, produceMessage
+, produceKeyedMessage
+, produceMessageBatch
+, pollEvents
+, drainOutQueue
+, fetchBrokerMetadata
+, getAllMetadata
+, getTopicMetadata
+, withKafkaProducer
+, withKafkaConsumer
+, dumpConfFromKafkaTopic
+, dumpConfFromKafka
+, module Haskakafka.InternalRdKafkaEnum
+
+-- Type re-exports
+, IT.Kafka
+, IT.KafkaTopic
+
+, IT.KafkaOffset(..)
+, IT.KafkaMessage(..)
+
+, IT.KafkaProduceMessage(..)
+, IT.KafkaProducePartition(..)
+
+, IT.KafkaMetadata(..)
+, IT.KafkaBrokerMetadata(..)
+, IT.KafkaTopicMetadata(..)
+, IT.KafkaPartitionMetadata(..)
+
+, IT.KafkaLogLevel(..)
+, IT.KafkaError(..)
 ) where
 
 import Control.Exception
 import Control.Monad
 import Data.Map.Strict (Map)
-import Data.Typeable
 import Foreign
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
 import Haskakafka.InternalRdKafka
 import Haskakafka.InternalRdKafkaEnum
+import Haskakafka.InternalTypes
 import System.IO
 import System.IO.Temp (withSystemTempFile)
 import qualified Data.Map.Strict as Map
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
-
-data KafkaLogLevel = 
-  KafkaLogEmerg | KafkaLogAlert | KafkaLogCrit | KafkaLogErr | KafkaLogWarning |
-  KafkaLogNotice | KafkaLogInfo | KafkaLogDebug
-
-instance Enum KafkaLogLevel where
-   toEnum 0 = KafkaLogEmerg
-   toEnum 1 = KafkaLogAlert
-   toEnum 2 = KafkaLogCrit
-   toEnum 3 = KafkaLogErr
-   toEnum 4 = KafkaLogWarning
-   toEnum 5 = KafkaLogNotice
-   toEnum 6 = KafkaLogInfo
-   toEnum 7 = KafkaLogDebug
-   toEnum _ = undefined
-
-   fromEnum KafkaLogEmerg = 0
-   fromEnum KafkaLogAlert = 1
-   fromEnum KafkaLogCrit = 2
-   fromEnum KafkaLogErr = 3
-   fromEnum KafkaLogWarning = 4
-   fromEnum KafkaLogNotice = 5
-   fromEnum KafkaLogInfo = 6
-   fromEnum KafkaLogDebug = 7
-
-data KafkaError = 
-    KafkaError String
-  | KafkaInvalidReturnValue
-  | KafkaBadSpecification String
-  | KafkaResponseError RdKafkaRespErrT
-  | KafkaInvalidConfigurationValue String
-  | KafkaUnknownConfigurationKey String
-  | KakfaBadConfiguration
-    deriving (Eq, Show, Typeable)
-
-instance Exception KafkaError
-
-data KafkaMessage = KafkaMessage
-    { messagePartition :: !Int
-    , messageOffset :: !Int64
-    , messagePayload :: !BS.ByteString
-    , messageKey :: Maybe BS.ByteString
-    }
-    deriving (Eq, Show, Read, Typeable)
-
-data KafkaProduceMessage = 
-    KafkaProduceMessage 
-      {-# UNPACK #-} !BS.ByteString
-  | KafkaProduceKeyedMessage 
-      {-# UNPACK #-} !BS.ByteString -- | Key
-      {-# UNPACK #-} !BS.ByteString -- | Payload
-  deriving (Eq, Show, Typeable)
-      
-
-data KafkaProducePartition = 
-    KafkaSpecifiedPartition {-# UNPACK #-} !Int
-  | KafkaUnassignedPartition
-
-data KafkaOffset = KafkaOffsetBeginning
-                 | KafkaOffsetEnd
-                 | KafkaOffsetStored
-                 | KafkaOffset Int64
-
-data KafkaConf = KafkaConf RdKafkaConfTPtr
-data KafkaTopicConf = KafkaTopicConf RdKafkaTopicConfTPtr
-
-data KafkaType = KafkaConsumer | KafkaProducer
-data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr, _kafkaConf :: KafkaConf}
-data KafkaTopic = KafkaTopic 
-    RdKafkaTopicTPtr  
-    Kafka -- Kept around to prevent garbage collection 
-    KafkaTopicConf
-
-
-kafkaTypeToRdKafkaType :: KafkaType -> RdKafkaTypeT
-kafkaTypeToRdKafkaType KafkaConsumer = RdKafkaConsumer
-kafkaTypeToRdKafkaType KafkaProducer = RdKafkaProducer
+import qualified Haskakafka.InternalTypes as IT
 
 -- Because of the rdKafka API, we have to create a temp file to get properties into a string
 supportedKafkaConfProperties :: IO (String)
@@ -187,9 +115,9 @@ setKafkaLogLevel :: Kafka -> KafkaLogLevel -> IO ()
 setKafkaLogLevel (Kafka kptr _) level = 
   rdKafkaSetLogLevel kptr (fromEnum level)
 
-newKafka :: KafkaType -> KafkaConf -> IO Kafka
+newKafka :: RdKafkaTypeT -> KafkaConf -> IO Kafka
 newKafka kafkaType c@(KafkaConf confPtr) = do
-    et <- newRdKafkaT (kafkaTypeToRdKafkaType kafkaType) confPtr 
+    et <- newRdKafkaT kafkaType confPtr 
     case et of 
         Left e -> error e
         Right x -> return $ Kafka x c
@@ -363,7 +291,7 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
     (do
       conf <- newKafkaConf
       mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
-      kafka <- newKafka KafkaProducer conf
+      kafka <- newKafka RdKafkaProducer conf
       addBrokers kafka brokerString
       topicConf <- newKafkaTopicConf
       mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
@@ -382,7 +310,7 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
     (do
       conf <- newKafkaConf
       mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
-      kafka <- newKafka KafkaConsumer conf
+      kafka <- newKafka RdKafkaConsumer conf
       addBrokers kafka brokerString
       topicConf <- newKafkaTopicConf
       mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
@@ -408,30 +336,13 @@ handleProduceErr (- 1) = getErrno >>= return . Just . kafkaRespErr
 handleProduceErr 0 = return $ Nothing
 handleProduceErr _ = return $ Just $ KafkaInvalidReturnValue
 
-
-data KafkaMetadata = KafkaMetadata
-    { brokers :: [KafkaBrokerMetadata]
-    , topics :: [Either KafkaError KafkaTopicMetadata]
-    } deriving (Eq, Show, Typeable)
-
-data KafkaBrokerMetadata = KafkaBrokerMetadata
-    { brokerId :: Int
-    , brokerHost :: String
-    , brokerPort :: Int
-    } deriving (Eq, Show, Typeable)
-
-data KafkaTopicMetadata = KafkaTopicMetadata
-    { topicName :: String
-    , topicPartitions :: [Either KafkaError KafkaPartitionMetadata]
-    } deriving (Eq, Show, Typeable)
-
-data KafkaPartitionMetadata = KafkaPartitionMetadata
-    { partitionId :: Int
-    , partitionLeader :: Int
-    , partitionReplicas :: [Int] 
-    , partitionIsrs :: [Int]
-    } deriving (Eq, Show, Typeable)
-
+fetchBrokerMetadata :: ConfigOverrides -> String -> Int -> IO (Either KafkaError KafkaMetadata)
+fetchBrokerMetadata configOverrides brokerString timeout = do
+    conf <- newKafkaConf
+    mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
+    kafka <- newKafka RdKafkaConsumer conf
+    addBrokers kafka brokerString
+    getAllMetadata kafka timeout
 
 getAllMetadata :: Kafka -> Int -> IO (Either KafkaError KafkaMetadata)
 getAllMetadata k timeout = getMetadata k Nothing timeout
