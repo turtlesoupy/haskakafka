@@ -91,6 +91,11 @@ testmain = hspec $ do
       (setKafkaTopicConfValue kConf "request.timeout.ms" "mono...doh!") `shouldThrow`
         (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
+  describe "Logging" $ do
+    it "should allow setting of log level" $ do
+      withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \kafka _ -> do
+        setKafkaLogLevel kafka KafkaLogDebug 
+
   describe "Consume and produce cycle" $ do
     it "should be able to produce and consume a unkeyed message off of the broker" $ do
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")

@@ -263,6 +263,9 @@ newRdKafkaT kafkaType confPtr =
 {#fun unsafe rd_kafka_brokers_add as ^
     {`RdKafkaTPtr', `String'} -> `Int' #}
 
+{#fun unsafe rd_kafka_set_log_level as ^
+  {`RdKafkaTPtr', `Int'} -> `()' #}
+
 -- rd_kafka consume
 
 {#fun unsafe rd_kafka_consume_start as rdKafkaConsumeStartInternal
