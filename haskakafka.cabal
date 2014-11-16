@@ -1,9 +1,8 @@
 name:                haskakafka
-version:             0.2.0.2
+version:             0.5.0
 synopsis:            Kafka bindings for Haskell
 description:         Use Apache Kafka in Haskell through the librdkafka
-                     C library. The library is preliminary but fully
-                     functional. 
+                     C library. 
 homepage:            http://github.com/cosbynator/haskakafka
 license:             MIT
 license-file:        LICENSE
@@ -49,4 +48,3 @@ test-suite tests
                 , haskakafka
                 , hspec
                 , regex-posix
-                , either-unwrap 

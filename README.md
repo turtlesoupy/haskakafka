@@ -1,9 +1,11 @@
 # Haskakafka
 
 Kafka bindings for Haskell backed by the 
-librdkafka C module (https://github.com/edenhill/librdkafka). See below for 
+librdkafka C module (https://github.com/edenhill/librdkafka). It has been tested and fully
+supports Kafka 0.8.x using librdkafka 0.8.1 and higher on Linux and OS X. Haskakafka supports
+keyed/unkeyed producers and consumers with optional batch operations. 
 
-These are meant to be a proof of concept and need some cleanup before production use.
+# Usage 
 
 # Installation
 
@@ -38,3 +40,25 @@ To do so, run:
 Afterwards installation should work, so go for
 
     cabal install haskakafka
+
+# Testing
+
+Haskakafka ships with a suite of integration tests to verify the library against
+a live Kafka instance. To get these setup you must have a broker running
+on `localhost:9092` (or overwrite the `HASKAKAFKA_TEST_BROKER` environment variable)
+with a `haskakafka_tests` topic created (or overwrite the `HASKAKAFKA_TEST_TOPIC` 
+environment variable).
+
+To get a broker running, download a [Kafka distribution](http://kafka.apache.org/downloads.html)
+and untar it into a directory. From there, run zookeeper using
+  
+  bin/zookeeper-server-start.sh config/zookeeper.properties
+
+and run kafka in a separate window using
+  
+  bin/kafka-server-start.sh config/server.properties
+
+With both Kafka and Zookeeper running, you can run tests through cabal:
+  
+  cabal install --only-dependencies --enable-tests
+  cabal test --log=/dev/stdout

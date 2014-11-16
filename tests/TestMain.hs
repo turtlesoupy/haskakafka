@@ -13,7 +13,28 @@ brokerAddress = "localhost:9092"
 brokerTopic :: String
 brokerTopic = "haskakafka_tests"
 kafkaProduceDelay :: Int -- Little delay so that the broker can queue the message
-kafkaProduceDelay = 5 * 1000 *  1000
+kafkaProduceDelay = 5 *  1000
+
+sampleProduceMessages :: [KafkaProduceMessage]
+sampleProduceMessages = 
+  [ (KafkaProduceMessage $ C8.pack "hello")
+  , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
+  , (KafkaProduceMessage $ C8.pack "goodbye")
+  ]
+
+shouldBeProduceConsume :: KafkaProduceMessage -> KafkaMessage -> IO ()
+shouldBeProduceConsume (KafkaProduceMessage ppayload) m = do
+  (messagePayload m) `shouldBe` ppayload
+  (messageKey m) `shouldBe` Nothing
+
+shouldBeProduceConsume (KafkaProduceKeyedMessage pkey ppayload) m = do
+  ppayload `shouldBe` (messagePayload m)
+  (Just pkey) `shouldBe` (messageKey m)
+
+shouldBeEmptyTopic :: KafkaTopic  -> IO ()
+shouldBeEmptyTopic kt = do
+  eof <- consumeMessage kt 0 kafkaProduceDelay
+  eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -72,7 +93,6 @@ testmain = hspec $ do
 
   describe "Consume and produce cycle" $ do
     it "should be able to produce and consume a unkeyed message off of the broker" $ do
-
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
       withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
         eof <- consumeMessage topic 0 kafkaProduceDelay
@@ -84,17 +104,13 @@ testmain = hspec $ do
         et <- consumeMessage topic 0 kafkaProduceDelay
         case et of 
           Left err -> error $ show err
-          Right m -> do
-            (messageKey m) `shouldBe` Nothing
-            (messagePayload $ m) `shouldBe` (C8.pack "hey hey we're the monkeys")
+          Right m -> message `shouldBeProduceConsume` m
 
     it "should be able to produce and consume a keyed message" $ do
       let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
 
       withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
-        eof <- consumeMessage topic 0 kafkaProduceDelay
-        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
-
+        shouldBeEmptyTopic topic
         perr <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
                   produceKeyedMessage producerTopic message
         perr `shouldBe` Nothing
@@ -102,42 +118,27 @@ testmain = hspec $ do
         et <- consumeMessage topic 0 kafkaProduceDelay
         case et of
           Left err -> error $ show err
-          Right m -> do
-            (messageKey m) `shouldBe` (Just $ C8.pack "key")
-            (messagePayload m) `shouldBe` (C8.pack "monkey around") 
+          Right m -> message `shouldBeProduceConsume` m
 
     it "should be able to batch produce messages" $ do
-      let messages = [ (KafkaProduceMessage $ C8.pack "hello")
-                     , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
-                     , (KafkaProduceMessage $ C8.pack "goodbye")
-                     ]
       withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
-        eof <- consumeMessage topic 0 kafkaProduceDelay
-        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+        shouldBeEmptyTopic topic
         errs <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
-                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) messages
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
         ets <- mapM (\_ -> consumeMessage topic 0 kafkaProduceDelay) ([1..3] :: [Integer])
 
-        forM_ (zip messages ets) $ \(pm, et) -> 
+        forM_ (zip sampleProduceMessages ets) $ \(pm, et) -> 
           case (pm, et) of
             (_, Left err) -> error $ show err
-            (KafkaProduceMessage ppayload, Right m) -> ppayload `shouldBe` (messagePayload m)
-            (KafkaProduceKeyedMessage pkey pvalue, Right m) -> do
-              pvalue `shouldBe` (messagePayload m)
-              (Just pkey) `shouldBe` (messageKey m)
+            (pmessage, Right cm) -> pmessage `shouldBeProduceConsume` cm
 
     it "should be able to batch consume messages" $ do
-      let messages = [ (KafkaProduceMessage $ C8.pack "hello")
-                     , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
-                     , (KafkaProduceMessage $ C8.pack "goodbye")
-                     ]
       withKafkaConsumer [] [] brokerAddress brokerTopic 0 KafkaOffsetEnd $ \_ topic -> do
-        eof <- consumeMessage topic 0 kafkaProduceDelay
-        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
+        shouldBeEmptyTopic topic
         errs <- withKafkaProducer [] [] brokerAddress brokerTopic $ \_ producerTopic -> do
-                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) messages
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
         et <- consumeMessageBatch topic 0 (1000) 5
@@ -145,13 +146,7 @@ testmain = hspec $ do
           (Left err) -> error $ show err
           (Right oms) -> do
             (length oms) `shouldBe` 3
-            forM_ (zip messages oms) $ \(pm, om) -> 
-              case (pm, om) of
-                (KafkaProduceMessage ppayload, m) -> ppayload `shouldBe` (messagePayload m)
-                (KafkaProduceKeyedMessage pkey pvalue, m) -> do
-                  pvalue `shouldBe` (messagePayload m)
-                  (Just pkey) `shouldBe` (messageKey m)
-              
+            forM_ (zip sampleProduceMessages oms) $ \(pm, om) -> pm `shouldBeProduceConsume` om
         
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
