@@ -52,13 +52,13 @@ environment variable).
 To get a broker running, download a [Kafka distribution](http://kafka.apache.org/downloads.html)
 and untar it into a directory. From there, run zookeeper using
   
-  bin/zookeeper-server-start.sh config/zookeeper.properties
+    bin/zookeeper-server-start.sh config/zookeeper.properties
 
 and run kafka in a separate window using
   
-  bin/kafka-server-start.sh config/server.properties
+    bin/kafka-server-start.sh config/server.properties
 
 With both Kafka and Zookeeper running, you can run tests through cabal:
   
-  cabal install --only-dependencies --enable-tests
-  cabal test --log=/dev/stdout
+    cabal install --only-dependencies --enable-tests
+    cabal test --log=/dev/stdout
