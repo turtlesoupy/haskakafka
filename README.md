@@ -1,4 +1,4 @@
-# Haskakafka
+# Haskakafka [![Hackage](https://img.shields.io/hackage/v/gitson.svg?style=flat)](https://hackage.haskell.org/package/haskakafka)
 
 Kafka bindings for Haskell backed by the 
 librdkafka C module (https://github.com/edenhill/librdkafka). It has been tested and fully
