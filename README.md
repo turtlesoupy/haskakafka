@@ -1,9 +1,11 @@
-# Haskakafka [![Hackage](https://img.shields.io/hackage/v/gitson.svg?style=flat)](https://hackage.haskell.org/package/haskakafka)
+# Haskakafka 
 
 Kafka bindings for Haskell backed by the 
 librdkafka C module (https://github.com/edenhill/librdkafka). It has been tested and fully
 supports Kafka 0.8.x using librdkafka 0.8.1 and higher on Linux and OS X. Haskakafka supports
 both producers and consumers with optional batch operations. 
+
+Hackage: http://hackage.haskell.org/package/haskakafka
 
 # Usage 
 A quick walkthrough of producers and consumers:
