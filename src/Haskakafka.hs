@@ -1,32 +1,25 @@
 module Haskakafka 
-( rdKafkaVersionStr
-, supportedKafkaConfProperties
-, hPrintKafkaProperties
-, hPrintKafka
-, setKafkaLogLevel
-, addBrokers
-, startConsuming
+( fetchBrokerMetadata
+, withKafkaConsumer
 , consumeMessage
 , consumeMessageBatch
-, storeOffset
-, stopConsuming
+, withKafkaProducer
 , produceMessage
 , produceKeyedMessage
 , produceMessageBatch
-, pollEvents
-, drainOutQueue
-, fetchBrokerMetadata
+, storeOffset
 , getAllMetadata
 , getTopicMetadata
-, withKafkaProducer
-, withKafkaConsumer
-, module Haskakafka.InternalRdKafkaEnum
 
 -- Internal objects
 , IS.newKafka
 , IS.newKafkaTopic
 , IS.dumpConfFromKafka
 , IS.dumpConfFromKafkaTopic
+, IS.setLogLevel
+, IS.hPrintSupportedKafkaConf
+, IS.hPrintKafka
+, rdKafkaVersionStr
 
 -- Type re-exports
 , IT.Kafka
@@ -45,6 +38,14 @@ module Haskakafka
 
 , IT.KafkaLogLevel(..)
 , IT.KafkaError(..)
+, RDE.RdKafkaRespErrT
+
+-- Pseudo-internal
+, addBrokers
+, startConsuming
+, stopConsuming
+, drainOutQueue
+
 ) where
 
 import Haskakafka.InternalRdKafka
@@ -58,37 +59,25 @@ import Foreign
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
-import System.IO
-import System.IO.Temp (withSystemTempFile)
 
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Haskakafka.InternalTypes as IT
 import qualified Haskakafka.InternalSetup as IS
+import qualified Haskakafka.InternalRdKafkaEnum as RDE
 
--- Because of the rdKafka API, we have to create a temp file to get properties into a string
-supportedKafkaConfProperties :: IO (String)
-supportedKafkaConfProperties = do 
-  withSystemTempFile "haskakafka.rdkafka_properties" $ \tP tH -> do
-    hPrintKafkaProperties tH
-    readFile tP
-
-hPrintKafkaProperties :: Handle -> IO ()
-hPrintKafkaProperties h = handleToCFile h "w" >>= rdKafkaConfPropertiesShow
-
-hPrintKafka :: Handle -> Kafka -> IO ()
-hPrintKafka h k = handleToCFile h "w" >>= \f -> rdKafkaDump f (kafkaPtr k)
-
-setKafkaLogLevel :: Kafka -> KafkaLogLevel -> IO ()
-setKafkaLogLevel (Kafka kptr _) level = 
-  rdKafkaSetLogLevel kptr (fromEnum level)
-
+-- | Adds a broker string to a given kafka instance. You
+-- probably shouldn't use this directly (see 'withKafkaConsumer'
+-- and 'withKafkaProducer')
 addBrokers :: Kafka -> String -> IO ()
 addBrokers (Kafka kptr _) brokerStr = do
     numBrokers <- rdKafkaBrokersAdd kptr brokerStr
     when (numBrokers == 0) 
         (throw $ KafkaBadSpecification "No valid brokers specified")
 
+-- | Starts consuming for a given topic. You probably do not need
+-- to call this directly (it is called automatically by 'withKafkaConsumer') but
+-- 'consumeMessage' won't work without it. This function is non-blocking.
 startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
 startConsuming (KafkaTopic topicPtr _ _) partition offset = 
     let trueOffset = case offset of
@@ -98,11 +87,16 @@ startConsuming (KafkaTopic topicPtr _ _) partition offset =
                         KafkaOffset i -> i
     in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
 
+-- | Stops consuming for a given topic. You probably do not need to call
+-- this directly (it is called automatically when 'withKafkaConsumer' terminates).
+stopConsuming :: KafkaTopic -> Int -> IO ()
+stopConsuming (KafkaTopic topicPtr _ _) partition = 
+    throwOnError $ rdKafkaConsumeStop topicPtr partition
+
 word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
 word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
     BSI.memcpy bsptr ptr len
     
-
 fromMessageStorable :: RdKafkaMessageT -> IO (KafkaMessage)
 fromMessageStorable s = do
     payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
@@ -115,8 +109,11 @@ fromMessageStorable s = do
              (offset'RdKafkaMessageT s)
              payload
              key 
-
-consumeMessage :: KafkaTopic -> Int -> Int -> IO (Either KafkaError KafkaMessage)
+-- | Consumes a single message from a Kafka topic, waiting up to a given timeout
+consumeMessage :: KafkaTopic 
+               -> Int -- ^ partition number to consume from (must match 'withKafkaConsumer')
+               -> Int -- ^ the timeout, in milliseconds (10^3 per second)
+               -> IO (Either KafkaError KafkaMessage) -- ^ Left on error or timeout, right for success
 consumeMessage (KafkaTopic topicPtr _ _) partition timeout = do
   ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
   withForeignPtr ptr $ \realPtr ->
@@ -137,7 +134,13 @@ consumeMessage (KafkaTopic topicPtr _ _) partition timeout = do
                 payload
                 key 
 
-consumeMessageBatch :: KafkaTopic -> Int -> Int -> Int -> IO (Either KafkaError [KafkaMessage])
+-- | Consumes a batch of messages from a Kafka topic, waiting up to a given timeout. Partial results
+-- will be returned if a timeout occurs.
+consumeMessageBatch :: KafkaTopic 
+                    -> Int -- ^ partition number to consume from (must match 'withKafkaConsumer')
+                    -> Int -- ^ timeout in milliseconds (10^3 per second)
+                    -> Int -- ^ maximum number of messages to return
+                    -> IO (Either KafkaError [KafkaMessage]) -- ^ Left on error, right with up to 'maxMessages' messages on success
 consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages = 
   allocaArray maxMessages $ \outputPtr -> do
     numMessages <- rdKafkaConsumeBatch topicPtr (fromIntegral partition) timeout outputPtr (fromIntegral maxMessages)
@@ -152,6 +155,9 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
               return ret
       return $ Right ms 
 
+-- | Store a partition's offset in librdkafka's offset store. This function only needs to be called
+-- if auto.commit.enable is false. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>
+-- for information on how to configure the offset store.
 storeOffset :: KafkaTopic -> Int -> Int -> IO (Maybe KafkaError)
 storeOffset (KafkaTopic topicPtr _ _) partition offset = do
   err <- rdKafkaOffsetStore topicPtr (fromIntegral partition) (fromIntegral offset)
@@ -159,7 +165,13 @@ storeOffset (KafkaTopic topicPtr _ _) partition offset = do
     RdKafkaRespErrNoError -> return Nothing
     e -> return $ Just $ KafkaResponseError e
 
-produceMessage :: KafkaTopic -> KafkaProducePartition -> KafkaProduceMessage -> IO (Maybe KafkaError)
+-- | Produce a single unkeyed message to either a random partition or specified partition. Since
+-- librdkafka is backed by a queue, this function can return before messages are sent. See 
+-- 'drainOutQueue' to wait for queue to empty.
+produceMessage :: KafkaTopic -- ^ topic pointer
+               -> KafkaProducePartition  -- ^ the partition to produce to. Specify 'KafkaUnassignedPartition' if you don't care.
+               -> KafkaProduceMessage  -- ^ the message to enqueue. This function is undefined for keyed messages.
+               -> IO (Maybe KafkaError) -- Nothing on success, error if something went wrong.
 produceMessage (KafkaTopic topicPtr _ _) partition (KafkaProduceMessage payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
 
@@ -173,7 +185,11 @@ produceMessage (KafkaTopic topicPtr _ _) partition (KafkaProduceMessage payload)
 
 produceMessage _ _ (KafkaProduceKeyedMessage _ _) = undefined
 
-produceKeyedMessage :: KafkaTopic -> KafkaProduceMessage -> IO (Maybe KafkaError)
+-- | Produce a single keyed message. Since librdkafka is backed by a queue, this function can return
+-- before messages are sent. See 'drainOutQueue' to wait for a queue to be empty
+produceKeyedMessage :: KafkaTopic -- ^ topic pointer
+                    -> KafkaProduceMessage  -- ^ keyed message. This function is undefined for unkeyed messages.
+                    -> IO (Maybe KafkaError) -- ^ Nothing on success, error if something went wrong.
 produceKeyedMessage _ (KafkaProduceMessage _) = undefined
 produceKeyedMessage (KafkaTopic topicPtr _ _) (KafkaProduceKeyedMessage key payload) = do
     let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr payload
@@ -189,7 +205,12 @@ produceKeyedMessage (KafkaTopic topicPtr _ _) (KafkaProduceKeyedMessage key payl
               copyMsgFlags passedPayload (fromIntegral payloadLength)
               passedKey (fromIntegral keyLength) nullPtr
 
-produceMessageBatch :: KafkaTopic -> KafkaProducePartition -> [KafkaProduceMessage] -> IO ([(KafkaProduceMessage, KafkaError)])
+-- | Produce a batch of messages. Since librdkafka is backed by a queue, this function can return
+-- before messages are sent. See 'drainOutQueue' to wait for the queue to be empty.
+produceMessageBatch :: KafkaTopic  -- ^ topic pointer
+                    -> KafkaProducePartition -- ^ partition to produce to. Specify 'KafkaUnassignedPartition' if you don't care, or you have keyed messsages.
+                    -> [KafkaProduceMessage] -- ^ list of messages to enqueue.
+                    -> IO ([(KafkaProduceMessage, KafkaError)]) -- list of failed messages with their errors. This will be empty on success.
 produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
   storables <- forM pms produceMessageToMessage
   withArray storables $ \batchPtr -> do
@@ -234,10 +255,16 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                 , key'RdKafkaMessageT = passedKey
                 }
 
-withKafkaProducer :: ConfigOverrides -> ConfigOverrides 
-                     -> String -> String 
-                     -> (Kafka -> KafkaTopic -> IO a) 
-                     -> IO a
+-- | Connects to Kafka broker in producer mode for a given topic, taking a function
+-- that is fed with 'Kafka' and 'KafkaTopic' instances. After receiving handles you
+-- should be using 'produceMessage', 'produceKeyedMessage' and 'produceMessageBatch'
+-- to publish messages. This function drains the outbound queue automatically before returning.
+withKafkaProducer :: ConfigOverrides -- ^ config overrides for kafka. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>. Use an empty list if you don't care.
+                  -> ConfigOverrides -- ^ config overrides for topic. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>. Use an empty list if you don't care.
+                  -> String -- ^ broker string, e.g. localhost:9092
+                  -> String -- ^ topic name
+                  -> (Kafka -> KafkaTopic -> IO a)  -- ^ your code, fed with 'Kafka' and 'KafkaTopic' instances for subsequent interaction.
+                  -> IO a -- ^ returns what your code does
 withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
   bracket 
     (do
@@ -249,10 +276,19 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
     (\(kafka, _) -> drainOutQueue kafka)
     (\(k, t) -> cb k t)
 
-withKafkaConsumer :: ConfigOverrides -> ConfigOverrides 
-                     -> String -> String -> Int -> KafkaOffset 
-                     -> (Kafka -> KafkaTopic -> IO a) 
-                     -> IO a
+-- | Connects to Kafka broker in consumer mode for a specific partition,
+-- taking a function that is fed with 
+-- 'Kafka' and 'KafkaTopic' instances. After receiving handles, you should be using
+-- 'consumeMessage' and 'consumeMessageBatch' to receive messages. This function
+-- automatically starts consuming before calling your code.
+withKafkaConsumer :: ConfigOverrides -- ^ config overrides for kafka. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>. Use an empty list if you don't care.
+                  -> ConfigOverrides -- ^ config overrides for topic. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>. Use an empty list if you don't care.
+                  -> String -- ^ broker string, e.g. localhost:9092
+                  -> String -- ^ topic name
+                  -> Int -- ^ partition to consume from. Locked until the function returns.
+                  -> KafkaOffset -- ^ where to begin consuming in the partition.
+                  -> (Kafka -> KafkaTopic -> IO a)  -- ^ your cod, fed with 'Kafka' and 'KafkaTopic' instances for subsequent interaction.
+                  -> IO a -- ^ returns what your code does
 withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partition offset cb =
   bracket
     (do
@@ -280,16 +316,27 @@ handleProduceErr (- 1) = getErrno >>= return . Just . kafkaRespErr
 handleProduceErr 0 = return $ Nothing
 handleProduceErr _ = return $ Just $ KafkaInvalidReturnValue
 
-fetchBrokerMetadata :: ConfigOverrides -> String -> Int -> IO (Either KafkaError KafkaMetadata)
+-- | Opens a connection with brokers and returns metadata about topics, partitions and brokers.
+fetchBrokerMetadata :: ConfigOverrides -- ^ connection overrides, see <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>
+                    -> String  -- broker connection string, e.g. localhost:9092
+                    -> Int -- timeout for the request, in milliseconds (10^3 per second)
+                    -> IO (Either KafkaError KafkaMetadata) -- Left on error, Right with metadata on success
 fetchBrokerMetadata configOverrides brokerString timeout = do
   kafka <- newKafka RdKafkaConsumer configOverrides
   addBrokers kafka brokerString
   getAllMetadata kafka timeout
 
-getAllMetadata :: Kafka -> Int -> IO (Either KafkaError KafkaMetadata)
+-- | Grabs all metadata from a given Kafka instance.
+getAllMetadata :: Kafka 
+               -> Int  -- ^ timeout in milliseconds (10^3 per second)
+               -> IO (Either KafkaError KafkaMetadata)
 getAllMetadata k timeout = getMetadata k Nothing timeout
 
-getTopicMetadata :: Kafka -> KafkaTopic -> Int -> IO (Either KafkaError KafkaTopicMetadata)
+-- | Grabs topic metadata from a given Kafka topic instance
+getTopicMetadata :: Kafka 
+                 -> KafkaTopic 
+                 -> Int  -- ^ timeout in milliseconds (10^3 per second)
+                 -> IO (Either KafkaError KafkaTopicMetadata)
 getTopicMetadata k kt timeout = do
   err <- getMetadata k (Just kt) timeout
   case err of 
@@ -368,6 +415,8 @@ pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
 outboundQueueLength :: Kafka -> IO (Int)
 outboundQueueLength (Kafka kPtr _) = rdKafkaOutqLen kPtr
 
+-- | Drains the outbound queue for a producer. This function is called automatically at the end of 
+-- 'withKafkaProducer' and usually doesn't need to be called directly.
 drainOutQueue :: Kafka -> IO ()
 drainOutQueue k = do
     pollEvents k 100
@@ -377,10 +426,6 @@ drainOutQueue k = do
 
 kafkaRespErr :: Errno -> KafkaError
 kafkaRespErr (Errno num) = KafkaResponseError $ rdKafkaErrno2err (fromIntegral num)
-
-stopConsuming :: KafkaTopic -> Int -> IO ()
-stopConsuming (KafkaTopic topicPtr _ _) partition = 
-    throwOnError $ rdKafkaConsumeStop topicPtr partition
 
 throwOnError :: IO (Maybe String) -> IO ()
 throwOnError action = do

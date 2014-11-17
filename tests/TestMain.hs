@@ -41,16 +41,14 @@ shouldBeProduceConsume (KafkaProduceKeyedMessage pkey ppayload) m = do
   ppayload `shouldBe` (messagePayload m)
   (Just pkey) `shouldBe` (messageKey m)
 
+primeEOF :: KafkaTopic -> IO ()
+primeEOF kt = consumeMessage kt 0 1000 >> return ()
+
 testmain :: IO ()
 testmain = hspec $ do
   describe "RdKafka versioning" $ do
     it "should be a valid version number" $ do
       rdKafkaVersionStr `shouldSatisfy` (=~"[0-9]+(.[0-9]+)+")
-
-  describe "Supported properties" $ do
-    it "should list supported properties" $ do
-      props <- supportedKafkaConfProperties
-      props `shouldSatisfy` (\x -> (length x) > 0)
 
   describe "Kafka Configuration" $ do
     it "should allow dumping" $ do
@@ -99,12 +97,13 @@ testmain = hspec $ do
   describe "Logging" $ do
     it "should allow setting of log level" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \kafka _ -> do
-        setKafkaLogLevel kafka KafkaLogDebug 
+        setLogLevel kafka KafkaLogDebug 
 
   describe "Consume and produce cycle" $ do
     it "should be able to produce and consume a unkeyed message off of the broker" $ getAddressTopic $ \a t -> do
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
         perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do 
                 produceMessage producerTopic (KafkaSpecifiedPartition 0) message
         perr `shouldBe` Nothing
@@ -118,6 +117,7 @@ testmain = hspec $ do
       let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
 
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
         perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceKeyedMessage producerTopic message
         perr `shouldBe` Nothing
@@ -129,6 +129,7 @@ testmain = hspec $ do
 
     it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
         errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
@@ -142,6 +143,7 @@ testmain = hspec $ do
 
     it "should be able to batch consume messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
         errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []

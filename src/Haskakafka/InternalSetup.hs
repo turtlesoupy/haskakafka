@@ -9,6 +9,7 @@ import Control.Monad
 import Data.Map.Strict (Map)
 import Foreign
 import Foreign.C.String
+import System.IO
 
 import qualified Data.Map.Strict as Map
 
@@ -37,6 +38,14 @@ newKafkaTopicPtr k@(Kafka kPtr _) tName conf@(KafkaTopicConf confPtr) = do
     case et of 
         Left e -> throw $ KafkaError e
         Right x -> return $ KafkaTopic x k conf
+
+-- 
+-- Misc.
+--
+-- | Sets library log level (noisiness) with respect to a kafka instance
+setLogLevel :: Kafka -> KafkaLogLevel -> IO ()
+setLogLevel (Kafka kptr _) level = 
+  rdKafkaSetLogLevel kptr (fromEnum level)
 
 --
 -- Configuration
@@ -95,6 +104,13 @@ setAllKafkaTopicConfValues conf overrides = forM_ overrides $ \(k, v) -> setKafk
 --
 -- Dumping
 --
+-- | Prints out all supported Kafka conf properties to a handle
+hPrintSupportedKafkaConf :: Handle -> IO ()
+hPrintSupportedKafkaConf h = handleToCFile h "w" >>= rdKafkaConfPropertiesShow
+
+-- | Prints out all data associated with a specific kafka object to a handle
+hPrintKafka :: Handle -> Kafka -> IO ()
+hPrintKafka h k = handleToCFile h "w" >>= \f -> rdKafkaDump f (kafkaPtr k)
 
 -- | Returns a map of the current kafka configuration
 dumpConfFromKafka :: Kafka -> IO (Map String String) 

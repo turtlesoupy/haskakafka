@@ -61,4 +61,11 @@ example = do
 
 
     -- Be a little less noisy
-    setKafkaLogLevel kafka KafkaLogCrit
+    setLogLevel kafka KafkaLogCrit
+
+  -- we can also fetch metadata about our Kafka infrastructure
+  let timeoutMs = 1000
+  emd <- fetchBrokerMetadata [] "localhost:9092" timeoutMs
+  case emd of 
+    (Left err) -> putStrLn $ "Uh oh, error time: " ++ (show err)
+    (Right md) -> putStrLn $ "Kafka metadata: " ++ (show md)

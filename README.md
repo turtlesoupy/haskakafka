@@ -3,7 +3,7 @@
 Kafka bindings for Haskell backed by the 
 librdkafka C module (https://github.com/edenhill/librdkafka). It has been tested and fully
 supports Kafka 0.8.x using librdkafka 0.8.1 and higher on Linux and OS X. Haskakafka supports
-keyed/unkeyed producers and consumers with optional batch operations. 
+both producers and consumers with optional batch operations. 
 
 # Usage 
 A quick walkthrough of producers and consumers:
@@ -69,7 +69,14 @@ example = do
 
 
     -- Be a little less noisy
-    setKafkaLogLevel kafka KafkaLogCrit
+    setLogLevel kafka KafkaLogCrit
+
+  -- we can also fetch metadata about our Kafka infrastructure
+  let timeoutMs = 1000
+  emd <- fetchBrokerMetadata [] "localhost:9092" timeoutMs
+  case emd of 
+    (Left err) -> putStrLn $ "Uh oh, error time: " ++ (show err)
+    (Right md) -> putStrLn $ "Kafka metadata: " ++ (show md)
 ```
 
 ## Configuration Options
