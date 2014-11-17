@@ -1,0 +1,1 @@
+module Haskakafka.InternalMetadata where

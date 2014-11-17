@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-} 
 module Main (main) where
 import Haskakafka
+import Haskakafka.InternalSetup
 
 import Control.Exception
 import Control.Monad
@@ -39,11 +40,6 @@ shouldBeProduceConsume (KafkaProduceMessage ppayload) m = do
 shouldBeProduceConsume (KafkaProduceKeyedMessage pkey ppayload) m = do
   ppayload `shouldBe` (messagePayload m)
   (Just pkey) `shouldBe` (messageKey m)
-
-shouldBeEmptyTopic :: KafkaTopic  -> IO ()
-shouldBeEmptyTopic kt = do
-  eof <- consumeMessage kt 0 kafkaDelay
-  eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -109,8 +105,6 @@ testmain = hspec $ do
     it "should be able to produce and consume a unkeyed message off of the broker" $ getAddressTopic $ \a t -> do
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        eof <- consumeMessage topic 0 kafkaDelay
-        eof `shouldBe` (Left $ KafkaResponseError $ RdKafkaRespErrPartitionEof)
         perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do 
                 produceMessage producerTopic (KafkaSpecifiedPartition 0) message
         perr `shouldBe` Nothing
@@ -124,7 +118,6 @@ testmain = hspec $ do
       let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
 
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        shouldBeEmptyTopic topic
         perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceKeyedMessage producerTopic message
         perr `shouldBe` Nothing
@@ -136,7 +129,6 @@ testmain = hspec $ do
 
     it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        shouldBeEmptyTopic topic
         errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
@@ -150,12 +142,11 @@ testmain = hspec $ do
 
     it "should be able to batch consume messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        shouldBeEmptyTopic topic
         errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
-        et <- consumeMessageBatch topic 0 (1000) 3
+        et <- consumeMessageBatch topic 0 (5000) 3
         case et of 
           (Left err) -> error $ show err
           (Right oms) -> do

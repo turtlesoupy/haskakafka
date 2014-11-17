@@ -1,19 +1,9 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-
 module Haskakafka 
 ( rdKafkaVersionStr
 , supportedKafkaConfProperties
 , hPrintKafkaProperties
 , hPrintKafka
-, newKafkaConf
-, setKafkaConfValue
-, setKafkaTopicConfValue
 , setKafkaLogLevel
-, dumpKafkaConf
-, newKafkaTopicConf
-, newKafka
-, newKafkaTopic
-, dumpKafkaTopicConf
 , addBrokers
 , startConsuming
 , consumeMessage
@@ -30,9 +20,13 @@ module Haskakafka
 , getTopicMetadata
 , withKafkaProducer
 , withKafkaConsumer
-, dumpConfFromKafkaTopic
-, dumpConfFromKafka
 , module Haskakafka.InternalRdKafkaEnum
+
+-- Internal objects
+, IS.newKafka
+, IS.newKafkaTopic
+, IS.dumpConfFromKafka
+, IS.dumpConfFromKafkaTopic
 
 -- Type re-exports
 , IT.Kafka
@@ -53,22 +47,24 @@ module Haskakafka
 , IT.KafkaError(..)
 ) where
 
+import Haskakafka.InternalRdKafka
+import Haskakafka.InternalRdKafkaEnum
+import Haskakafka.InternalSetup
+import Haskakafka.InternalTypes
+
 import Control.Exception
 import Control.Monad
-import Data.Map.Strict (Map)
 import Foreign
 import Foreign.C.Error
 import Foreign.C.String
 import Foreign.C.Types
-import Haskakafka.InternalRdKafka
-import Haskakafka.InternalRdKafkaEnum
-import Haskakafka.InternalTypes
 import System.IO
 import System.IO.Temp (withSystemTempFile)
-import qualified Data.Map.Strict as Map
+
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Internal as BSI
 import qualified Haskakafka.InternalTypes as IT
+import qualified Haskakafka.InternalSetup as IS
 
 -- Because of the rdKafka API, we have to create a temp file to get properties into a string
 supportedKafkaConfProperties :: IO (String)
@@ -83,51 +79,9 @@ hPrintKafkaProperties h = handleToCFile h "w" >>= rdKafkaConfPropertiesShow
 hPrintKafka :: Handle -> Kafka -> IO ()
 hPrintKafka h k = handleToCFile h "w" >>= \f -> rdKafkaDump f (kafkaPtr k)
 
-newKafkaTopicConf :: IO KafkaTopicConf
-newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
-
-newKafkaConf :: IO KafkaConf
-newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
-
-checkConfSetValue :: RdKafkaConfResT -> CCharBufPointer -> IO ()
-checkConfSetValue err charPtr = case err of 
-    RdKafkaConfOk -> return ()
-    RdKafkaConfInvalid -> do 
-      str <- peekCString charPtr
-      throw $ KafkaInvalidConfigurationValue str
-    RdKafkaConfUnknown -> do
-      str <- peekCString charPtr
-      throw $ KafkaUnknownConfigurationKey str
-
-setKafkaConfValue :: KafkaConf -> String -> String -> IO ()
-setKafkaConfValue (KafkaConf confPtr) key value = do
-  allocaBytes nErrorBytes $ \charPtr -> do
-    err <- rdKafkaConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
-    checkConfSetValue err charPtr
-
-setKafkaTopicConfValue :: KafkaTopicConf -> String -> String -> IO ()
-setKafkaTopicConfValue (KafkaTopicConf confPtr) key value = do
-  allocaBytes nErrorBytes $ \charPtr -> do
-    err <- rdKafkaTopicConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
-    checkConfSetValue err charPtr
-
 setKafkaLogLevel :: Kafka -> KafkaLogLevel -> IO ()
 setKafkaLogLevel (Kafka kptr _) level = 
   rdKafkaSetLogLevel kptr (fromEnum level)
-
-newKafka :: RdKafkaTypeT -> KafkaConf -> IO Kafka
-newKafka kafkaType c@(KafkaConf confPtr) = do
-    et <- newRdKafkaT kafkaType confPtr 
-    case et of 
-        Left e -> error e
-        Right x -> return $ Kafka x c
-
-newKafkaTopic :: Kafka -> String -> KafkaTopicConf -> IO (KafkaTopic)
-newKafkaTopic k@(Kafka kPtr _) tName conf@(KafkaTopicConf confPtr) = do
-    et <- newRdKafkaTopicT kPtr tName confPtr
-    case et of 
-        Left e -> throw $ KafkaError e
-        Right x -> return $ KafkaTopic x k conf
 
 addBrokers :: Kafka -> String -> IO ()
 addBrokers (Kafka kptr _) brokerStr = do
@@ -143,7 +97,6 @@ startConsuming (KafkaTopic topicPtr _ _) partition offset =
                         KafkaOffsetStored -> (- 1000)
                         KafkaOffset i -> i
     in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
-
 
 word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
 word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
@@ -281,7 +234,6 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                 , key'RdKafkaMessageT = passedKey
                 }
 
-type ConfigOverrides = [(String, String)]
 withKafkaProducer :: ConfigOverrides -> ConfigOverrides 
                      -> String -> String 
                      -> (Kafka -> KafkaTopic -> IO a) 
@@ -289,13 +241,9 @@ withKafkaProducer :: ConfigOverrides -> ConfigOverrides
 withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
   bracket 
     (do
-      conf <- newKafkaConf
-      mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
-      kafka <- newKafka RdKafkaProducer conf
+      kafka <- newKafka RdKafkaProducer configOverrides
       addBrokers kafka brokerString
-      topicConf <- newKafkaTopicConf
-      mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
-      topic <- newKafkaTopic kafka tName topicConf
+      topic <- newKafkaTopic kafka tName topicConfigOverrides
       return (kafka, topic)
     )
     (\(kafka, _) -> drainOutQueue kafka)
@@ -308,13 +256,9 @@ withKafkaConsumer :: ConfigOverrides -> ConfigOverrides
 withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partition offset cb =
   bracket
     (do
-      conf <- newKafkaConf
-      mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
-      kafka <- newKafka RdKafkaConsumer conf
+      kafka <- newKafka RdKafkaConsumer configOverrides
       addBrokers kafka brokerString
-      topicConf <- newKafkaTopicConf
-      mapM_ (\(k, v) -> setKafkaTopicConfValue topicConf k v) topicConfigOverrides 
-      topic <- newKafkaTopic kafka tName topicConf
+      topic <- newKafkaTopic kafka tName topicConfigOverrides
       startConsuming topic partition offset
       return (kafka, topic)
     )
@@ -338,11 +282,9 @@ handleProduceErr _ = return $ Just $ KafkaInvalidReturnValue
 
 fetchBrokerMetadata :: ConfigOverrides -> String -> Int -> IO (Either KafkaError KafkaMetadata)
 fetchBrokerMetadata configOverrides brokerString timeout = do
-    conf <- newKafkaConf
-    mapM_ (\(k, v) -> setKafkaConfValue conf k v) configOverrides
-    kafka <- newKafka RdKafkaConsumer conf
-    addBrokers kafka brokerString
-    getAllMetadata kafka timeout
+  kafka <- newKafka RdKafkaConsumer configOverrides
+  addBrokers kafka brokerString
+  getAllMetadata kafka timeout
 
 getAllMetadata :: Kafka -> Int -> IO (Either KafkaError KafkaMetadata)
 getAllMetadata k timeout = getMetadata k Nothing timeout
@@ -447,34 +389,3 @@ throwOnError action = do
         Just e -> throw $ KafkaError e
         Nothing -> return ()
 
-
-dumpKafkaTopicConf :: KafkaTopicConf -> IO (Map String String)
-dumpKafkaTopicConf (KafkaTopicConf kptr) = 
-    parseDump (\sizeptr -> rdKafkaTopicConfDump kptr sizeptr)
-
-dumpKafkaConf :: KafkaConf -> IO (Map String String)
-dumpKafkaConf (KafkaConf kptr) = do
-    parseDump (\sizeptr -> rdKafkaConfDump kptr sizeptr)
-
-dumpConfFromKafka :: Kafka -> IO (Map String String) 
-dumpConfFromKafka (Kafka _ cfg) = dumpKafkaConf cfg
-
-dumpConfFromKafkaTopic :: KafkaTopic -> IO (Map String String)
-dumpConfFromKafkaTopic (KafkaTopic _ _ conf) = dumpKafkaTopicConf conf
-
-
-parseDump :: (CSizePtr -> IO (Ptr CString)) -> IO (Map String String)
-parseDump cstr = alloca $ \sizeptr -> do
-    strPtr <- cstr sizeptr 
-    size <- peek sizeptr
-
-    keysAndValues <- mapM (\i -> peekCString =<< peekElemOff strPtr i) [0..((fromIntegral size) - 1)]
-
-    let ret = Map.fromList $ listToTuple keysAndValues
-    rdKafkaConfDumpFree strPtr size
-    return ret
-
-listToTuple :: [String] -> [(String, String)]
-listToTuple [] = []
-listToTuple (k:v:t) = (k, v) : listToTuple t
-listToTuple _ = error "list to tuple can only be called on even length lists"
