@@ -1,7 +1,7 @@
 # Haskakafka 
 
 Kafka bindings for Haskell backed by the 
-librdkafka C module (https://github.com/edenhill/librdkafka). It has been tested and fully
+[librdkafka C module](https://github.com/edenhill/librdkafka). It has been tested and fully
 supports Kafka 0.8.x using librdkafka 0.8.1 and higher on Linux and OS X. Haskakafka supports
 both producers and consumers with optional batch operations. 
 
