@@ -37,7 +37,7 @@ example = do
 
     -- Produce a single keyed message
     let keyMessage = KafkaProduceKeyedMessage (C8.pack "Key") samplePayload
-    _ <- produceKeyedMessage topic message
+    _ <- produceKeyedMessage topic keyMessage
 
     -- We can also use the batch API for better performance
     _ <- produceMessageBatch topic KafkaUnassignedPartition [message, keyMessage]
