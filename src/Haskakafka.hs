@@ -145,6 +145,7 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
   allocaArray maxMessages $ \outputPtr -> do
     numMessages <- rdKafkaConsumeBatch topicPtr (fromIntegral partition) timeout outputPtr (fromIntegral maxMessages)
     if numMessages < 0 then getErrno >>= return . Left . kafkaRespErr
+    else if numMessages == 0 then return . Right $ []
     else do
       ms <- forM [0..(numMessages - 1)] $ \mnum -> do 
               storablePtr <- peekElemOff outputPtr (fromIntegral mnum)
