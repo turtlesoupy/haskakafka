@@ -155,6 +155,17 @@ testmain = hspec $ do
             (length oms) `shouldBe` 3
             forM_ (zip sampleProduceMessages oms) $ \(pm, om) -> pm `shouldBeProduceConsume` om
 
+    -- test for https://github.com/cosbynator/haskakafka/issues/12
+    it "should not fail on batch consume when no messages are available #12" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        et <- consumeMessageBatch topic 0 (5000) 3
+        case et of 
+          (Left err) -> error $ show err
+          (Right oms) -> do
+            (length oms) `shouldBe` 0
+
+
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
 checkForKafka = do
