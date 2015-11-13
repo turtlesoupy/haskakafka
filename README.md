@@ -120,7 +120,7 @@ Afterwards installation should work, so go for
 
     cabal install haskakafka
 
-This uses the latest version of Haskakafka from [http://hackage.haskell.org/package/haskakafka](Hackage)
+This uses the latest version of Haskakafka from [Hackage](http://hackage.haskell.org/package/haskakafka)
 
 # Testing
 

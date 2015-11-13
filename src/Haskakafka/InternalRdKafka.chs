@@ -280,10 +280,10 @@ rdKafkaConsumeStart topicPtr partition offset = do
 {#fun unsafe rd_kafka_consume_stop as rdKafkaConsumeStopInternal
     {`RdKafkaTopicTPtr', cIntConv `CInt32T'} -> `Int' #}
 
-{#fun unsafe rd_kafka_consume as ^
+{#fun rd_kafka_consume as ^
   {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int'} -> `RdKafkaMessageTPtr' #}
 
-{#fun unsafe rd_kafka_consume_batch as ^
+{#fun rd_kafka_consume_batch as ^
   {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Ptr (Ptr RdKafkaMessageT)', cIntConv `CSize'}
   -> `CSize' cIntConv #}
 
