@@ -1,4 +1,4 @@
-module Haskakafka 
+module Haskakafka
 ( fetchBrokerMetadata
 , withKafkaConsumer
 , consumeMessage
@@ -66,20 +66,22 @@ import qualified Haskakafka.InternalTypes as IT
 import qualified Haskakafka.InternalSetup as IS
 import qualified Haskakafka.InternalRdKafkaEnum as RDE
 
+import Data.Either
+
 -- | Adds a broker string to a given kafka instance. You
 -- probably shouldn't use this directly (see 'withKafkaConsumer'
 -- and 'withKafkaProducer')
 addBrokers :: Kafka -> String -> IO ()
 addBrokers (Kafka kptr _) brokerStr = do
     numBrokers <- rdKafkaBrokersAdd kptr brokerStr
-    when (numBrokers == 0) 
+    when (numBrokers == 0)
         (throw $ KafkaBadSpecification "No valid brokers specified")
 
 -- | Starts consuming for a given topic. You probably do not need
 -- to call this directly (it is called automatically by 'withKafkaConsumer') but
 -- 'consumeMessage' won't work without it. This function is non-blocking.
 startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
-startConsuming (KafkaTopic topicPtr _ _) partition offset = 
+startConsuming (KafkaTopic topicPtr _ _) partition offset =
     let trueOffset = case offset of
                         KafkaOffsetBeginning -> (- 2)
                         KafkaOffsetEnd -> (- 1)
@@ -90,58 +92,58 @@ startConsuming (KafkaTopic topicPtr _ _) partition offset =
 -- | Stops consuming for a given topic. You probably do not need to call
 -- this directly (it is called automatically when 'withKafkaConsumer' terminates).
 stopConsuming :: KafkaTopic -> Int -> IO ()
-stopConsuming (KafkaTopic topicPtr _ _) partition = 
+stopConsuming (KafkaTopic topicPtr _ _) partition =
     throwOnError $ rdKafkaConsumeStop topicPtr partition
 
 word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
-word8PtrToBS len ptr = BSI.create len $ \bsptr -> 
+word8PtrToBS len ptr = BSI.create len $ \bsptr ->
     BSI.memcpy bsptr ptr len
-    
+
 fromMessageStorable :: RdKafkaMessageT -> IO (KafkaMessage)
 fromMessageStorable s = do
-    payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+    payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s)
 
-    key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+    key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing
            else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
 
     return $ KafkaMessage
-             (partition'RdKafkaMessageT s) 
+             (partition'RdKafkaMessageT s)
              (offset'RdKafkaMessageT s)
              payload
-             key 
+             key
 -- | Consumes a single message from a Kafka topic, waiting up to a given timeout
-consumeMessage :: KafkaTopic 
+consumeMessage :: KafkaTopic
                -> Int -- ^ partition number to consume from (must match 'withKafkaConsumer')
                -> Int -- ^ the timeout, in milliseconds (10^3 per second)
                -> IO (Either KafkaError KafkaMessage) -- ^ Left on error or timeout, right for success
 consumeMessage (KafkaTopic topicPtr _ _) partition timeout = do
   ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
   withForeignPtr ptr $ \realPtr ->
-    if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr 
+    if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr
     else do
         addForeignPtrFinalizer rdKafkaMessageDestroy ptr
         s <- peek realPtr
         if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaResponseError $ err'RdKafkaMessageT s
         else do
-            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s) 
+            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s)
 
-            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing 
+            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing
                    else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
 
             return $ Right $ KafkaMessage
-                (partition'RdKafkaMessageT s) 
+                (partition'RdKafkaMessageT s)
                 (offset'RdKafkaMessageT s)
                 payload
-                key 
+                key
 
 -- | Consumes a batch of messages from a Kafka topic, waiting up to a given timeout. Partial results
 -- will be returned if a timeout occurs.
-consumeMessageBatch :: KafkaTopic 
+consumeMessageBatch :: KafkaTopic
                     -> Int -- ^ partition number to consume from (must match 'withKafkaConsumer')
                     -> Int -- ^ timeout in milliseconds (10^3 per second)
                     -> Int -- ^ maximum number of messages to return
                     -> IO (Either KafkaError [KafkaMessage]) -- ^ Left on error, right with up to 'maxMessages' messages on success
-consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages = 
+consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
   allocaArray maxMessages $ \outputPtr -> do
     numMessages <- rdKafkaConsumeBatch topicPtr (fromIntegral partition) timeout outputPtr (fromIntegral maxMessages)
     if numMessages < 0 then getErrno >>= return . Left . kafkaRespErr
@@ -153,9 +155,15 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
               ret <- fromMessageStorable storable
               fptr <- newForeignPtr_ storablePtr
               addForeignPtrFinalizer rdKafkaMessageDestroy fptr
-              return ret
+              if (err'RdKafkaMessageT storable) /= RdKafkaRespErrNoError then
+                  return $ Left $ KafkaResponseError $ err'RdKafkaMessageT storable
+              else
+                  return $ Right ret
             else return []
-      return $ Right ms
+      case lefts ms of
+        [] -> return $ Right $ rights ms
+        l  -> return $ Left $ head l
+      --return $ Right ms
 
 
 -- | Store a partition's offset in librdkafka's offset store. This function only needs to be called
@@ -164,12 +172,12 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
 storeOffset :: KafkaTopic -> Int -> Int -> IO (Maybe KafkaError)
 storeOffset (KafkaTopic topicPtr _ _) partition offset = do
   err <- rdKafkaOffsetStore topicPtr (fromIntegral partition) (fromIntegral offset)
-  case err of 
+  case err of
     RdKafkaRespErrNoError -> return Nothing
     e -> return $ Just $ KafkaResponseError e
 
 -- | Produce a single unkeyed message to either a random partition or specified partition. Since
--- librdkafka is backed by a queue, this function can return before messages are sent. See 
+-- librdkafka is backed by a queue, this function can return before messages are sent. See
 -- 'drainOutQueue' to wait for queue to empty.
 produceMessage :: KafkaTopic -- ^ topic pointer
                -> KafkaProducePartition  -- ^ the partition to produce to. Specify 'KafkaUnassignedPartition' if you don't care.
@@ -180,8 +188,8 @@ produceMessage (KafkaTopic topicPtr _ _) partition (KafkaProduceMessage payload)
 
     withForeignPtr payloadFPtr $ \payloadPtr -> do
         let passedPayload = payloadPtr `plusPtr` payloadOffset
-        
-        handleProduceErr =<< 
+
+        handleProduceErr =<<
           rdKafkaProduce topicPtr (producePartitionInteger partition)
             copyMsgFlags passedPayload (fromIntegral payloadLength)
             nullPtr (CSize 0) nullPtr
@@ -203,7 +211,7 @@ produceKeyedMessage (KafkaTopic topicPtr _ _) (KafkaProduceKeyedMessage key payl
           let passedPayload = payloadPtr `plusPtr` payloadOffset
               passedKey = keyPtr `plusPtr` keyOffset
 
-          handleProduceErr =<< 
+          handleProduceErr =<<
             rdKafkaProduce topicPtr (producePartitionInteger KafkaUnassignedPartition)
               copyMsgFlags passedPayload (fromIntegral payloadLength)
               passedKey (fromIntegral keyLength) nullPtr
@@ -220,8 +228,8 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
     batchPtrF <- newForeignPtr_ batchPtr
     numRet <- rdKafkaProduceBatch topicPtr partitionInt copyMsgFlags batchPtrF (length storables)
     if numRet == (length storables) then return []
-    else do 
-      errs <- mapM (\i -> return . err'RdKafkaMessageT =<< peekElemOff batchPtr i) 
+    else do
+      errs <- mapM (\i -> return . err'RdKafkaMessageT =<< peekElemOff batchPtr i)
                    [0..((fromIntegral $ length storables) - 1)]
       return [(m, KafkaResponseError e) | (m, e) <- (zip pms errs), e /= RdKafkaRespErrNoError]
   where
@@ -230,8 +238,8 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
         withForeignPtr payloadFPtr $ \payloadPtr -> do
           let passedPayload = payloadPtr `plusPtr` payloadOffset
-          return $ RdKafkaMessageT 
-              { err'RdKafkaMessageT = RdKafkaRespErrNoError 
+          return $ RdKafkaMessageT
+              { err'RdKafkaMessageT = RdKafkaRespErrNoError
               , partition'RdKafkaMessageT = fromIntegral partitionInt
               , len'RdKafkaMessageT = payloadLength
               , payload'RdKafkaMessageT = passedPayload
@@ -242,14 +250,14 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
     produceMessageToMessage (KafkaProduceKeyedMessage kbs bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
             (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr kbs
-             
+
         withForeignPtr payloadFPtr $ \payloadPtr -> do
           withForeignPtr keyFPtr $ \keyPtr -> do
             let passedPayload = payloadPtr `plusPtr` payloadOffset
                 passedKey = keyPtr `plusPtr` keyOffset
 
-            return $ RdKafkaMessageT 
-                { err'RdKafkaMessageT = RdKafkaRespErrNoError 
+            return $ RdKafkaMessageT
+                { err'RdKafkaMessageT = RdKafkaRespErrNoError
                 , partition'RdKafkaMessageT = fromIntegral partitionInt
                 , len'RdKafkaMessageT = payloadLength
                 , payload'RdKafkaMessageT = passedPayload
@@ -269,7 +277,7 @@ withKafkaProducer :: ConfigOverrides -- ^ config overrides for kafka. See <https
                   -> (Kafka -> KafkaTopic -> IO a)  -- ^ your code, fed with 'Kafka' and 'KafkaTopic' instances for subsequent interaction.
                   -> IO a -- ^ returns what your code does
 withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
-  bracket 
+  bracket
     (do
       kafka <- newKafka RdKafkaProducer configOverrides
       addBrokers kafka brokerString
@@ -280,7 +288,7 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
     (\(k, t) -> cb k t)
 
 -- | Connects to Kafka broker in consumer mode for a specific partition,
--- taking a function that is fed with 
+-- taking a function that is fed with
 -- 'Kafka' and 'KafkaTopic' instances. After receiving handles, you should be using
 -- 'consumeMessage' and 'consumeMessageBatch' to receive messages. This function
 -- automatically starts consuming before calling your code.
@@ -315,7 +323,7 @@ producePartitionInteger (KafkaSpecifiedPartition n) = fromIntegral n
 
 {-# INLINE handleProduceErr #-}
 handleProduceErr :: Int -> IO (Maybe KafkaError)
-handleProduceErr (- 1) = getErrno >>= return . Just . kafkaRespErr 
+handleProduceErr (- 1) = getErrno >>= return . Just . kafkaRespErr
 handleProduceErr 0 = return $ Nothing
 handleProduceErr _ = return $ Just $ KafkaInvalidReturnValue
 
@@ -330,35 +338,35 @@ fetchBrokerMetadata configOverrides brokerString timeout = do
   getAllMetadata kafka timeout
 
 -- | Grabs all metadata from a given Kafka instance.
-getAllMetadata :: Kafka 
+getAllMetadata :: Kafka
                -> Int  -- ^ timeout in milliseconds (10^3 per second)
                -> IO (Either KafkaError KafkaMetadata)
 getAllMetadata k timeout = getMetadata k Nothing timeout
 
 -- | Grabs topic metadata from a given Kafka topic instance
-getTopicMetadata :: Kafka 
-                 -> KafkaTopic 
+getTopicMetadata :: Kafka
+                 -> KafkaTopic
                  -> Int  -- ^ timeout in milliseconds (10^3 per second)
                  -> IO (Either KafkaError KafkaTopicMetadata)
 getTopicMetadata k kt timeout = do
   err <- getMetadata k (Just kt) timeout
-  case err of 
+  case err of
     Left e -> return $ Left $ e
-    Right md -> case (topics md) of 
+    Right md -> case (topics md) of
       [(Left e)] -> return $ Left e
       [(Right tmd)] -> return $ Right tmd
       _ -> return $ Left $ KafkaError "Incorrect number of topics returned"
 
 getMetadata :: Kafka -> Maybe KafkaTopic -> Int -> IO (Either KafkaError KafkaMetadata)
 getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
-    err <- case mTopic of  
-      Just (KafkaTopic kTopicPtr _ _) -> 
+    err <- case mTopic of
+      Just (KafkaTopic kTopicPtr _ _) ->
         rdKafkaMetadata kPtr False kTopicPtr mdDblPtr timeout
       Nothing -> do
         nullTopic <- newForeignPtr_ nullPtr
         rdKafkaMetadata kPtr True nullTopic mdDblPtr timeout
 
-    case err of 
+    case err of
       RdKafkaRespErrNoError -> do
         mdPtr <- peek mdDblPtr
         md <- peek mdPtr
@@ -367,7 +375,7 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
         return $ Right $ retMd
       e -> return $ Left $ KafkaResponseError e
 
-    where 
+    where
       constructMetadata md =  do
         let nBrokers = (brokerCnt'RdKafkaMetadataT md)
             brokersPtr = (brokers'RdKafkaMetadataT md)
@@ -380,7 +388,7 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
 
       constructBrokerMetadata bmd = do
         hostStr <- peekCString (host'RdKafkaMetadataBrokerT bmd)
-        return $ KafkaBrokerMetadata 
+        return $ KafkaBrokerMetadata
                   (id'RdKafkaMetadataBrokerT bmd)
                   (hostStr)
                   (port'RdKafkaMetadataBrokerT bmd)
@@ -405,8 +413,8 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
                 isrsPtr = (isrs'RdKafkaMetadataPartitionT pmd)
             replicas <- mapM (\i -> peekElemOff replicasPtr i) [0..((fromIntegral nReplicas) - 1)]
             isrs <- mapM (\i -> peekElemOff isrsPtr i) [0..((fromIntegral nIsrs) - 1)]
-            return $ Right $ KafkaPartitionMetadata 
-              (id'RdKafkaMetadataPartitionT pmd)              
+            return $ Right $ KafkaPartitionMetadata
+              (id'RdKafkaMetadataPartitionT pmd)
               (leader'RdKafkaMetadataPartitionT pmd)
               (map fromIntegral replicas)
               (map fromIntegral isrs)
@@ -418,7 +426,7 @@ pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
 outboundQueueLength :: Kafka -> IO (Int)
 outboundQueueLength (Kafka kPtr _) = rdKafkaOutqLen kPtr
 
--- | Drains the outbound queue for a producer. This function is called automatically at the end of 
+-- | Drains the outbound queue for a producer. This function is called automatically at the end of
 -- 'withKafkaProducer' and usually doesn't need to be called directly.
 drainOutQueue :: Kafka -> IO ()
 drainOutQueue k = do
@@ -433,7 +441,6 @@ kafkaRespErr (Errno num) = KafkaResponseError $ rdKafkaErrno2err (fromIntegral n
 throwOnError :: IO (Maybe String) -> IO ()
 throwOnError action = do
     m <- action
-    case m of 
+    case m of
         Just e -> throw $ KafkaError e
         Nothing -> return ()
-
