@@ -8,6 +8,7 @@ module Haskakafka.Consumer
 , subscribe
 , pollMessage
 , closeConsumer
+, setOffsetStore
 
 -- Types
 , CIT.ConsumerGroupId (..)
@@ -43,7 +44,7 @@ runConsumerConf c bs ts f =
     where
         mkConsumer = do
             kafka <- newKafkaConsumer bs c
-            setHlConsumer kafka
+            _ <- setHlConsumer kafka
             sErr  <- subscribe kafka ts
             return $ if hasError sErr
                          then Left (sErr, kafka)

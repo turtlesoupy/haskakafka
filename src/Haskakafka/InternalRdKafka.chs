@@ -12,7 +12,6 @@ import Foreign.C.String
 import Foreign.C.Types
 import Haskakafka.InternalRdKafkaEnum
 import System.IO
-import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.IO
 import System.Posix.Types
 
@@ -21,7 +20,7 @@ import System.Posix.Types
 type CInt64T = {#type int64_t #}
 type CInt32T = {#type int32_t #}
 
-{#pointer *FILE as CFilePtr -> CFile #} 
+{#pointer *FILE as CFilePtr -> CFile #}
 {#pointer *size_t as CSizePtr -> CSize #}
 
 type Word8Ptr = Ptr Word8
@@ -53,7 +52,7 @@ nErrorBytes = 1024 * 8
 
 kafkaErrnoString :: IO (String)
 kafkaErrnoString = do
-    (Errno num) <- getErrno 
+    (Errno num) <- getErrno
     return $ rdKafkaErr2str $ rdKafkaErrno2err (fromIntegral num)
 
 -- Kafka Pointer Types
@@ -61,7 +60,7 @@ data RdKafkaConfT
 {#pointer *rd_kafka_conf_t as RdKafkaConfTPtr foreign -> RdKafkaConfT #}
 
 data RdKafkaTopicConfT
-{#pointer *rd_kafka_topic_conf_t as RdKafkaTopicConfTPtr foreign -> RdKafkaTopicConfT #} 
+{#pointer *rd_kafka_topic_conf_t as RdKafkaTopicConfTPtr foreign -> RdKafkaTopicConfT #}
 
 data RdKafkaT
 {#pointer *rd_kafka_t as RdKafkaTPtr foreign -> RdKafkaT #}
@@ -75,7 +74,7 @@ data RdKafkaTopicPartitionT = RdKafkaTopicPartitionT
     , opaque'RdKafkaTopicPartitionT :: Word8Ptr
     , err'RdKafkaTopicPartitionT :: RdKafkaRespErrT
     } deriving (Show, Eq)
-    
+
 instance Storable RdKafkaTopicPartitionT where
     alignment _ = {#alignof rd_kafka_topic_partition_t#}
     sizeOf _ = {#sizeof rd_kafka_topic_partition_t#}
@@ -95,15 +94,15 @@ instance Storable RdKafkaTopicPartitionT where
         {#set rd_kafka_topic_partition_t.metadata_size#} p (fromIntegral $ metadataSize'RdKafkaTopicPartitionT x)
         {#set rd_kafka_topic_partition_t.opaque#}        p (castPtr      $ opaque'RdKafkaTopicPartitionT x)
         {#set rd_kafka_topic_partition_t.err#}           p (enumToCInt   $ err'RdKafkaTopicPartitionT x)
-        
-{#pointer *rd_kafka_topic_partition_t as RdKafkaTopicPartitionTPtr foreign -> RdKafkaTopicPartitionT #}      
+
+{#pointer *rd_kafka_topic_partition_t as RdKafkaTopicPartitionTPtr foreign -> RdKafkaTopicPartitionT #}
 
 data RdKafkaTopicPartitionListT = RdKafkaTopicPartitionListT
     { cnt'RdKafkaTopicPartitionListT   :: Int
     , size'RdKafkaTopicPartitionListT  :: Int
     , elems'RdKafkaTopicPartitionListT :: Ptr RdKafkaTopicPartitionT
     } deriving (Show, Eq)
-    
+
 {#pointer *rd_kafka_topic_partition_list_t as RdKafkaTopicPartitionListTPtr foreign -> RdKafkaTopicPartitionListT #}
 
 instance Storable RdKafkaTopicPartitionListT where
@@ -121,7 +120,7 @@ instance Storable RdKafkaTopicPartitionListT where
 data RdKafkaTopicT
 {#pointer *rd_kafka_topic_t as RdKafkaTopicTPtr foreign -> RdKafkaTopicT #}
 
-data RdKafkaMessageT = RdKafkaMessageT 
+data RdKafkaMessageT = RdKafkaMessageT
     { err'RdKafkaMessageT :: RdKafkaRespErrT
     , topic'RdKafkaMessageT :: Ptr RdKafkaTopicT
     , partition'RdKafkaMessageT :: Int
@@ -132,7 +131,7 @@ data RdKafkaMessageT = RdKafkaMessageT
     , key'RdKafkaMessageT :: Word8Ptr
     }
     deriving (Show, Eq)
-    
+
 instance Storable RdKafkaMessageT where
     alignment _ = {#alignof rd_kafka_message_t#}
     sizeOf _ = {#sizeof rd_kafka_message_t#}
@@ -168,7 +167,7 @@ data RdKafkaMetadataBrokerT = RdKafkaMetadataBrokerT
 
 instance Storable RdKafkaMetadataBrokerT where
   alignment _ = {#alignof rd_kafka_metadata_broker_t#}
-  sizeOf _ = {#sizeof rd_kafka_metadata_broker_t#}
+  sizeOf _ = 24
   peek p = RdKafkaMetadataBrokerT
     <$> liftM fromIntegral ({#get rd_kafka_metadata_broker_t->id #} p)
     <*> liftM id ({#get rd_kafka_metadata_broker_t->host #} p)
@@ -210,7 +209,7 @@ data RdKafkaMetadataTopicT = RdKafkaMetadataTopicT
 
 instance Storable RdKafkaMetadataTopicT where
   alignment _ = {#alignof rd_kafka_metadata_topic_t#}
-  sizeOf _ = {#sizeof rd_kafka_metadata_topic_t #}
+  sizeOf _ = 32
   peek p = RdKafkaMetadataTopicT
     <$> liftM id ({#get rd_kafka_metadata_topic_t->topic #} p)
     <*> liftM fromIntegral ({#get rd_kafka_metadata_topic_t->partition_cnt #} p)
@@ -248,45 +247,45 @@ instance Storable RdKafkaMetadataT where
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_partition_list_destroy"
     rdKafkaTopicPartitionListDestroy :: FunPtr (Ptr RdKafkaTopicPartitionListT -> IO ())
-    
+
 newRdKafkaTopicPartitionListT :: Int -> IO RdKafkaTopicPartitionListTPtr
 newRdKafkaTopicPartitionListT size = do
     ret <- rdKafkaTopicPartitionListNew size
     addForeignPtrFinalizer rdKafkaTopicPartitionListDestroy ret
     return ret
-    
+
 {# fun unsafe rd_kafka_topic_partition_list_add as ^
     {`RdKafkaTopicPartitionListTPtr', `String', `Int'} -> `RdKafkaTopicPartitionTPtr' #}
-    
+
 {# fun unsafe rd_kafka_topic_partition_list_add_range as ^
     {`RdKafkaTopicPartitionListTPtr', `String', `Int', `Int'} -> `()' #}
-    
+
 {# fun unsafe rd_kafka_topic_partition_list_copy as ^
     {`RdKafkaTopicPartitionListTPtr'} -> `RdKafkaTopicPartitionListTPtr' #}
-    
+
 copyRdKafkaTopicPartitionList :: RdKafkaTopicPartitionListTPtr -> IO RdKafkaTopicPartitionListTPtr
 copyRdKafkaTopicPartitionList pl = do
     cp <- rdKafkaTopicPartitionListCopy pl
     addForeignPtrFinalizer rdKafkaTopicPartitionListDestroy cp
     return cp
-    
+
 {# fun unsafe rd_kafka_topic_partition_list_set_offset as ^
-    {`RdKafkaTopicPartitionListTPtr', `String', `Int', `Int64'} 
+    {`RdKafkaTopicPartitionListTPtr', `String', `Int', `Int64'}
     -> `RdKafkaRespErrT' cIntToEnum #}
 
 ---- Rebalance Callback
 type RdRebalanceCallback' = Ptr RdKafkaT -> CInt -> Ptr RdKafkaTopicPartitionListT -> Ptr Word8 -> IO ()
 type RdRebalanceCallback = Ptr RdKafkaT -> RdKafkaRespErrT -> Ptr RdKafkaTopicPartitionListT -> Ptr Word8 -> IO ()
- 
-foreign import ccall safe "wrapper" 
+
+foreign import ccall safe "wrapper"
     mkRebalanceCallback :: RdRebalanceCallback' -> IO (FunPtr RdRebalanceCallback')
 
 foreign import ccall safe "rd_kafka.h rd_kafka_conf_set_rebalance_cb"
      rdKafkaConfSetRebalanceCb' ::
-       Ptr RdKafkaConfT 
-       -> FunPtr RdRebalanceCallback' 
+       Ptr RdKafkaConfT
+       -> FunPtr RdRebalanceCallback'
        -> IO ()
-       
+
 rdKafkaConfSetRebalanceCb :: RdKafkaConfTPtr -> RdRebalanceCallback -> IO ()
 rdKafkaConfSetRebalanceCb conf cb = do
     cb' <- mkRebalanceCallback (\k e p o -> cb k (cIntToEnum e) p o)
@@ -301,7 +300,7 @@ foreign import ccall safe "wrapper"
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_conf_set_dr_msg_cb"
     rdKafkaConfSetDrMsgCb' :: Ptr RdKafkaConfT -> FunPtr DeliveryCallback -> IO ()
-    
+
 rdKafkaConfSetDrMsgCb :: RdKafkaConfTPtr -> DeliveryCallback -> IO ()
 rdKafkaConfSetDrMsgCb conf cb = do
     cb' <- mkDeliveryCallback cb
@@ -316,7 +315,7 @@ foreign import ccall safe "wrapper"
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_conf_set_consume_cb"
     rdKafkaConfSetConsumeCb' :: Ptr RdKafkaConfT -> FunPtr ConsumeCallback -> IO ()
-    
+
 rdKafkaConfSetConsumeCb :: RdKafkaConfTPtr -> ConsumeCallback -> IO ()
 rdKafkaConfSetConsumeCb conf cb = do
     cb' <- mkConsumeCallback cb
@@ -347,14 +346,14 @@ foreign import ccall safe "wrapper"
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_conf_set_throttle_cb"
     rdKafkaConfSetThrottleCb' :: Ptr RdKafkaConfT -> FunPtr ThrottleCallback -> IO ()
-    
+
 rdKafkaConfSetThrottleCb :: RdKafkaConfTPtr -> ThrottleCallback -> IO ()
 rdKafkaConfSetThrottleCb conf cb = do
     cb' <- mkThrottleCallback cb
     withForeignPtr conf $ \c -> rdKafkaConfSetThrottleCb' c cb'
     return ()
 
----- Stats Callback    
+---- Stats Callback
 type StatsCallback = Ptr RdKafkaT -> CString -> CSize -> Word8Ptr -> IO ()
 
 foreign import ccall safe "wrapper"
@@ -362,7 +361,7 @@ foreign import ccall safe "wrapper"
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_conf_set_stats_cb"
     rdKafkaConfSetStatsCb' :: Ptr RdKafkaConfT -> FunPtr StatsCallback -> IO ()
-    
+
 rdKafkaConfSetStatsCb :: RdKafkaConfTPtr -> StatsCallback -> IO ()
 rdKafkaConfSetStatsCb conf cb = do
     cb' <- mkStatsCallback cb
@@ -377,49 +376,49 @@ foreign import ccall safe "wrapper"
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_conf_set_socket_cb"
     rdKafkaConfSetSocketCb' :: Ptr RdKafkaConfT -> FunPtr SocketCallback -> IO ()
-    
+
 rdKafkaConfSetSocketCb :: RdKafkaConfTPtr -> SocketCallback -> IO ()
 rdKafkaConfSetSocketCb conf cb = do
     cb' <- mkSocketCallback cb
     withForeignPtr conf $ \c -> rdKafkaConfSetSocketCb' c cb'
     return ()
-    
+
 {#fun unsafe rd_kafka_conf_set_opaque as ^
     {`RdKafkaConfTPtr', castPtr `Word8Ptr'} -> `()' #}
-    
+
 {#fun unsafe rd_kafka_opaque as ^
     {`RdKafkaTPtr'} -> `Word8Ptr' castPtr #}
-    
+
 {#fun unsafe rd_kafka_conf_set_default_topic_conf as ^
    {`RdKafkaConfTPtr', `RdKafkaTopicConfTPtr'} -> `()' #}
-   
+
 ---- Partitioner Callback
-type PartitionerCallback = 
-    Ptr RdKafkaTopicTPtr 
-    -> Word8Ptr    -- keydata 
+type PartitionerCallback =
+    Ptr RdKafkaTopicTPtr
+    -> Word8Ptr    -- keydata
     -> Int         -- keylen
     -> Int         -- partition_cnt
     -> Word8Ptr    -- topic_opaque
     -> Word8Ptr    -- msg_opaque
-    -> IO Int 
+    -> IO Int
 
 foreign import ccall safe "wrapper"
     mkPartitionerCallback :: PartitionerCallback -> IO (FunPtr PartitionerCallback)
 
 foreign import ccall unsafe "rd_kafka.h rd_kafka_topic_conf_set_partitioner_cb"
     rdKafkaTopicConfSetPartitionerCb' :: Ptr RdKafkaTopicConfT -> FunPtr PartitionerCallback -> IO ()
-    
+
 rdKafkaTopicConfSetPartitionerCb :: RdKafkaTopicConfTPtr -> PartitionerCallback -> IO ()
 rdKafkaTopicConfSetPartitionerCb conf cb = do
     cb' <- mkPartitionerCallback cb
     withForeignPtr conf $ \c -> rdKafkaTopicConfSetPartitionerCb' c cb'
     return ()
-    
+
 ---- Partition
 
 {#fun unsafe rd_kafka_topic_partition_available as ^
     {`RdKafkaTopicTPtr', cIntConv `CInt32T'} -> `Int' #}
-    
+
 {#fun unsafe rd_kafka_msg_partitioner_random as ^
     { `RdKafkaTopicTPtr'
     , castPtr `Word8Ptr'
@@ -428,7 +427,7 @@ rdKafkaTopicConfSetPartitionerCb conf cb = do
     , castPtr `Word8Ptr'
     , castPtr `Word8Ptr'}
     -> `CInt32T' cIntConv #}
-    
+
 {#fun unsafe rd_kafka_msg_partitioner_consistent as ^
     { `RdKafkaTopicTPtr'
     , castPtr `Word8Ptr'
@@ -437,7 +436,7 @@ rdKafkaTopicConfSetPartitionerCb conf cb = do
     , castPtr `Word8Ptr'
     , castPtr `Word8Ptr'}
     -> `CInt32T' cIntConv #}
-    
+
 {#fun unsafe rd_kafka_msg_partitioner_consistent_random as ^
     { `RdKafkaTopicTPtr'
     , castPtr `Word8Ptr'
@@ -446,7 +445,7 @@ rdKafkaTopicConfSetPartitionerCb conf cb = do
     , castPtr `Word8Ptr'
     , castPtr `Word8Ptr'}
     -> `CInt32T' cIntConv #}
-    
+
 ---- Poll / Yield
 
 {#fun unsafe rd_kafka_yield as ^
@@ -455,67 +454,67 @@ rdKafkaTopicConfSetPartitionerCb conf cb = do
 ---- Pause / Resume
 {#fun unsafe rd_kafka_pause_partitions as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'} -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_resume_partitions as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'} -> `RdKafkaRespErrT' cIntToEnum #}
 
 ---- QUEUE
 data RdKafkaQueueT
-{#pointer *rd_kafka_queue_t as RdKafkaQueueTPtr foreign -> RdKafkaQueueT #} 
+{#pointer *rd_kafka_queue_t as RdKafkaQueueTPtr foreign -> RdKafkaQueueT #}
 
 {#fun unsafe rd_kafka_queue_new as ^
     {`RdKafkaTPtr'} -> `RdKafkaQueueTPtr' #}
-    
+
 foreign import ccall unsafe "rdkafka.h &rd_kafka_queue_destroy"
     rdKafkaQueueDestroy :: FunPtr (Ptr RdKafkaQueueT -> IO ())
-    
+
 newRdKafkaQueue :: RdKafkaTPtr -> IO RdKafkaQueueTPtr
 newRdKafkaQueue k = do
     q <- rdKafkaQueueNew k
     addForeignPtrFinalizer rdKafkaQueueDestroy q
     return q
 -------------------------------------------------------------------------------------------------
----- High-level KafkaConsumer 
+---- High-level KafkaConsumer
 
 {#fun unsafe rd_kafka_subscribe as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_unsubscribe as ^
     {`RdKafkaTPtr'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_subscription as ^
-    {`RdKafkaTPtr', castPtr `Ptr (Ptr RdKafkaTopicPartitionListT)'} 
+    {`RdKafkaTPtr', castPtr `Ptr (Ptr RdKafkaTopicPartitionListT)'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_consumer_poll as ^
     {`RdKafkaTPtr', `Int'} -> `RdKafkaMessageTPtr' #}
-    
+
 {#fun unsafe rd_kafka_consumer_close as ^
     {`RdKafkaTPtr'} -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_poll_set_consumer as ^
     {`RdKafkaTPtr'} -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 -- rd_kafka_assign
 {#fun unsafe rd_kafka_assign as ^
-    {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'} 
+    {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_assignment as ^
     {`RdKafkaTPtr', castPtr `Ptr (Ptr RdKafkaTopicPartitionListT)'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_commit as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr', `Int'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
+
 {#fun unsafe rd_kafka_commit_message as ^
     {`RdKafkaTPtr', `RdKafkaMessageTPtr', `Int'}
     -> `RdKafkaRespErrT' cIntToEnum #}
-    
-{#fun unsafe rd_kafka_position as ^ 
+
+{#fun unsafe rd_kafka_position as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr', `Int'}
     -> `RdKafkaRespErrT' cIntToEnum #}
 -------------------------------------------------------------------------------------------------
@@ -528,7 +527,7 @@ data RdKafkaGroupMemberInfoT = RdKafkaGroupMemberInfoT
     , memberMetadataSize'RdKafkaGroupMemberInfoT    :: Int
     , memberAssignment'RdKafkaGroupMemberInfoT      :: Word8Ptr
     , memberAssignmentSize'RdKafkaGroupMemberInfoT  :: Int }
-    
+
 instance Storable RdKafkaGroupMemberInfoT where
     alignment _ = {#alignof rd_kafka_group_member_info#}
     sizeOf _ = {#sizeof rd_kafka_group_member_info#}
@@ -560,7 +559,7 @@ data RdKafkaGroupInfoT = RdKafkaGroupInfoT
     , protocol'RdKafkaGroupInfoT     :: CString
     , members'RdKafkaGroupInfoT      :: Ptr RdKafkaGroupMemberInfoT
     , memberCnt'RdKafkaGroupInfoT    :: Int }
-    
+
 instance Storable RdKafkaGroupInfoT where
     alignment _ = {#alignof rd_kafka_group_info #}
     sizeOf _ = {#sizeof rd_kafka_group_info #}
@@ -585,10 +584,10 @@ instance Storable RdKafkaGroupInfoT where
 
 {#pointer *rd_kafka_group_info as RdKafkaGroupInfoTPtr foreign -> RdKafkaGroupInfoT #}
 
-data RdKafkaGroupListT = RdKafkaGroupListT 
+data RdKafkaGroupListT = RdKafkaGroupListT
     { groups'RdKafkaGroupListT   :: Ptr RdKafkaGroupInfoT
     , groupCnt'RdKafkaGroupListT :: Int }
-    
+
 instance Storable RdKafkaGroupListT where
     alignment _ = {#alignof rd_kafka_group_list #}
     sizeOf _ = {#sizeof rd_kafka_group_list #}
@@ -598,16 +597,16 @@ instance Storable RdKafkaGroupListT where
     poke p x = do
       {#set rd_kafka_group_list.groups#}        p (castPtr      $ groups'RdKafkaGroupListT x)
       {#set rd_kafka_group_list.group_cnt#}     p (fromIntegral $ groupCnt'RdKafkaGroupListT x)
-      
+
 {#pointer *rd_kafka_group_list as RdKafkaGroupListTPtr foreign -> RdKafkaGroupListT #}
 
 {#fun rd_kafka_list_groups as ^
     {`RdKafkaTPtr', `String', castPtr `Ptr (Ptr RdKafkaGroupListT)', `Int'}
-    -> `RdKafkaRespErrT' cIntToEnum #} 
-    
+    -> `RdKafkaRespErrT' cIntToEnum #}
+
 foreign import ccall unsafe "rdkafka.h &rd_kafka_list_groups"
     rdKafkaGroupListDestroy :: FunPtr (Ptr RdKafkaGroupListT -> IO ())
-    
+
 -- listRdKafkaGroups :: RdKafkaTPtr -> String -> Int -> IO (Either RdKafkaRespErrT RdKafkaGroupListTPtr)
 -- listRdKafkaGroups k g t = alloca $ \lstDblPtr -> do
 --     err <- rdKafkaListGroups k g lstDblPtr t
@@ -635,7 +634,7 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
     {`RdKafkaConfTPtr'} -> `RdKafkaConfTPtr' #}
 
 {#fun unsafe rd_kafka_conf_set as ^
-  {`RdKafkaConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'} 
+  {`RdKafkaConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'}
   -> `RdKafkaConfResT' cIntToEnum #}
 
 newRdKafkaConfT :: IO RdKafkaConfTPtr
@@ -663,7 +662,7 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
     rdKafkaTopicConfDestroy :: FunPtr (Ptr RdKafkaTopicConfT -> IO ())
 
 {#fun unsafe rd_kafka_topic_conf_set as ^
-  {`RdKafkaTopicConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'} 
+  {`RdKafkaTopicConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'}
   -> `RdKafkaConfResT' cIntToEnum #}
 
 newRdKafkaTopicConfT :: IO RdKafkaTopicConfTPtr
@@ -677,14 +676,14 @@ newRdKafkaTopicConfT = do
 
 -- rd_kafka
 {#fun unsafe rd_kafka_new as ^
-    {enumToCInt `RdKafkaTypeT', `RdKafkaConfTPtr', id `CCharBufPointer', cIntConv `CSize'} 
+    {enumToCInt `RdKafkaTypeT', `RdKafkaConfTPtr', id `CCharBufPointer', cIntConv `CSize'}
     -> `RdKafkaTPtr' #}
 
 foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
     rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
 
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
-newRdKafkaT kafkaType confPtr = 
+newRdKafkaT kafkaType confPtr =
     allocaBytes nErrorBytes $ \charPtr -> do
         duper <- rdKafkaConfDup confPtr
         ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
@@ -708,7 +707,7 @@ newRdKafkaT kafkaType confPtr =
 rdKafkaConsumeStart :: RdKafkaTopicTPtr -> Int -> Int64 -> IO (Maybe String)
 rdKafkaConsumeStart topicPtr partition offset = do
     i <- rdKafkaConsumeStartInternal topicPtr (fromIntegral partition) (fromIntegral offset)
-    case i of 
+    case i of
         -1 -> kafkaErrnoString >>= return . Just
         _ -> return Nothing
 {#fun unsafe rd_kafka_consume_stop as rdKafkaConsumeStopInternal
@@ -724,18 +723,18 @@ rdKafkaConsumeStart topicPtr partition offset = do
 rdKafkaConsumeStop :: RdKafkaTopicTPtr -> Int -> IO (Maybe String)
 rdKafkaConsumeStop topicPtr partition = do
     i <- rdKafkaConsumeStopInternal topicPtr (fromIntegral partition)
-    case i of 
+    case i of
         -1 -> kafkaErrnoString >>= return . Just
         _ -> return Nothing
 
 {#fun unsafe rd_kafka_offset_store as rdKafkaOffsetStore
-  {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T'} 
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T'}
   -> `RdKafkaRespErrT' cIntToEnum #}
 
 -- rd_kafka produce
 
 {#fun unsafe rd_kafka_produce as ^
-    {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Word8Ptr', 
+    {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Word8Ptr',
      cIntConv `CSize', castPtr `Word8Ptr', cIntConv `CSize', castPtr `Word8Ptr'}
      -> `Int' #}
 
@@ -748,7 +747,7 @@ castMetadata ptr = castPtr ptr
 -- rd_kafka_metadata
 
 {#fun unsafe rd_kafka_metadata as ^
-   {`RdKafkaTPtr', boolToCInt `Bool', `RdKafkaTopicTPtr', 
+   {`RdKafkaTPtr', boolToCInt `Bool', `RdKafkaTopicTPtr',
     castMetadata `Ptr (Ptr RdKafkaMetadataT)', `Int'}
    -> `RdKafkaRespErrT' cIntToEnum #}
 
@@ -799,13 +798,13 @@ boolToCInt False = CInt 0
 -- Handle -> File descriptor
 
 foreign import ccall "" fdopen :: Fd -> CString -> IO (Ptr CFile)
- 
+
 handleToCFile :: Handle -> String -> IO (CFilePtr)
 handleToCFile h m =
  do iomode <- newCString m
     fd <- handleToFd h
     fdopen fd iomode
- 
+
 c_stdin :: IO CFilePtr
 c_stdin = handleToCFile stdin "r"
 c_stdout :: IO CFilePtr
