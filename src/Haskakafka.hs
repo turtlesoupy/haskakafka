@@ -48,23 +48,23 @@ module Haskakafka
 
 ) where
 
-import Haskakafka.InternalRdKafka
-import Haskakafka.InternalRdKafkaEnum
-import Haskakafka.InternalSetup
-import Haskakafka.InternalTypes
+import           Haskakafka.InternalRdKafka
+import           Haskakafka.InternalRdKafkaEnum
+import           Haskakafka.InternalSetup
+import           Haskakafka.InternalShared
+import           Haskakafka.InternalTypes
 
-import Control.Exception
-import Control.Monad
-import Foreign
-import Foreign.C.Error
-import Foreign.C.String
-import Foreign.C.Types
+import           Control.Exception
+import           Control.Monad
+import           Foreign
+import           Foreign.C.Error
+import           Foreign.C.String
+import           Foreign.C.Types
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Internal as BSI
-import qualified Haskakafka.InternalTypes as IT
-import qualified Haskakafka.InternalSetup as IS
+import qualified Data.ByteString.Internal       as BSI
 import qualified Haskakafka.InternalRdKafkaEnum as RDE
+import qualified Haskakafka.InternalSetup       as IS
+import qualified Haskakafka.InternalTypes       as IT
 
 import Data.Either
 
@@ -86,6 +86,7 @@ startConsuming (KafkaTopic topicPtr _ _) partition offset =
                         KafkaOffsetBeginning -> (- 2)
                         KafkaOffsetEnd -> (- 1)
                         KafkaOffsetStored -> (- 1000)
+                        KafkaOffsetInvalid -> (- 1001)
                         KafkaOffset i -> i
     in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
 
@@ -95,22 +96,6 @@ stopConsuming :: KafkaTopic -> Int -> IO ()
 stopConsuming (KafkaTopic topicPtr _ _) partition =
     throwOnError $ rdKafkaConsumeStop topicPtr partition
 
-word8PtrToBS :: Int -> Word8Ptr -> IO (BS.ByteString)
-word8PtrToBS len ptr = BSI.create len $ \bsptr ->
-    BSI.memcpy bsptr ptr len
-
-fromMessageStorable :: RdKafkaMessageT -> IO (KafkaMessage)
-fromMessageStorable s = do
-    payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s)
-
-    key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing
-           else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
-
-    return $ KafkaMessage
-             (partition'RdKafkaMessageT s)
-             (offset'RdKafkaMessageT s)
-             payload
-             key
 -- | Consumes a single message from a Kafka topic, waiting up to a given timeout
 consumeMessage :: KafkaTopic
                -> Int -- ^ partition number to consume from (must match 'withKafkaConsumer')
@@ -118,23 +103,7 @@ consumeMessage :: KafkaTopic
                -> IO (Either KafkaError KafkaMessage) -- ^ Left on error or timeout, right for success
 consumeMessage (KafkaTopic topicPtr _ _) partition timeout = do
   ptr <- rdKafkaConsume topicPtr (fromIntegral partition) (fromIntegral timeout)
-  withForeignPtr ptr $ \realPtr ->
-    if realPtr == nullPtr then getErrno >>= return . Left . kafkaRespErr
-    else do
-        addForeignPtrFinalizer rdKafkaMessageDestroy ptr
-        s <- peek realPtr
-        if (err'RdKafkaMessageT s) /= RdKafkaRespErrNoError then return $ Left $ KafkaResponseError $ err'RdKafkaMessageT s
-        else do
-            payload <- word8PtrToBS (len'RdKafkaMessageT s) (payload'RdKafkaMessageT s)
-
-            key <- if (key'RdKafkaMessageT s) == nullPtr then return Nothing
-                   else word8PtrToBS (keyLen'RdKafkaMessageT s) (key'RdKafkaMessageT s) >>= return . Just
-
-            return $ Right $ KafkaMessage
-                (partition'RdKafkaMessageT s)
-                (offset'RdKafkaMessageT s)
-                payload
-                key
+  fromMessagePtr ptr
 
 -- | Consumes a batch of messages from a Kafka topic, waiting up to a given timeout. Partial results
 -- will be returned if a timeout occurs.
@@ -236,35 +205,39 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
     partitionInt = (producePartitionInteger partition)
     produceMessageToMessage (KafkaProduceMessage bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
-        withForeignPtr payloadFPtr $ \payloadPtr -> do
-          let passedPayload = payloadPtr `plusPtr` payloadOffset
-          return $ RdKafkaMessageT
-              { err'RdKafkaMessageT = RdKafkaRespErrNoError
-              , partition'RdKafkaMessageT = fromIntegral partitionInt
-              , len'RdKafkaMessageT = payloadLength
-              , payload'RdKafkaMessageT = passedPayload
-              , offset'RdKafkaMessageT = 0
-              , keyLen'RdKafkaMessageT = 0
-              , key'RdKafkaMessageT = nullPtr
-              }
+        withForeignPtr topicPtr $ \ptrTopic -> do
+            withForeignPtr payloadFPtr $ \payloadPtr -> do
+              let passedPayload = payloadPtr `plusPtr` payloadOffset
+              return $ RdKafkaMessageT
+                  { err'RdKafkaMessageT = RdKafkaRespErrNoError
+                  , topic'RdKafkaMessageT = ptrTopic
+                  , partition'RdKafkaMessageT = fromIntegral partitionInt
+                  , len'RdKafkaMessageT = payloadLength
+                  , payload'RdKafkaMessageT = passedPayload
+                  , offset'RdKafkaMessageT = 0
+                  , keyLen'RdKafkaMessageT = 0
+                  , key'RdKafkaMessageT = nullPtr
+                  }
     produceMessageToMessage (KafkaProduceKeyedMessage kbs bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
             (keyFPtr, keyOffset, keyLength) = BSI.toForeignPtr kbs
 
-        withForeignPtr payloadFPtr $ \payloadPtr -> do
-          withForeignPtr keyFPtr $ \keyPtr -> do
-            let passedPayload = payloadPtr `plusPtr` payloadOffset
-                passedKey = keyPtr `plusPtr` keyOffset
+        withForeignPtr topicPtr $ \ptrTopic ->
+            withForeignPtr payloadFPtr $ \payloadPtr -> do
+              withForeignPtr keyFPtr $ \keyPtr -> do
+                let passedPayload = payloadPtr `plusPtr` payloadOffset
+                    passedKey = keyPtr `plusPtr` keyOffset
 
-            return $ RdKafkaMessageT
-                { err'RdKafkaMessageT = RdKafkaRespErrNoError
-                , partition'RdKafkaMessageT = fromIntegral partitionInt
-                , len'RdKafkaMessageT = payloadLength
-                , payload'RdKafkaMessageT = passedPayload
-                , offset'RdKafkaMessageT = 0
-                , keyLen'RdKafkaMessageT = keyLength
-                , key'RdKafkaMessageT = passedKey
-                }
+                return $ RdKafkaMessageT
+                    { err'RdKafkaMessageT = RdKafkaRespErrNoError
+                    , topic'RdKafkaMessageT = ptrTopic
+                    , partition'RdKafkaMessageT = fromIntegral partitionInt
+                    , len'RdKafkaMessageT = payloadLength
+                    , payload'RdKafkaMessageT = passedPayload
+                    , offset'RdKafkaMessageT = 0
+                    , keyLen'RdKafkaMessageT = keyLength
+                    , key'RdKafkaMessageT = passedKey
+                    }
 
 -- | Connects to Kafka broker in producer mode for a given topic, taking a function
 -- that is fed with 'Kafka' and 'KafkaTopic' instances. After receiving handles you
@@ -434,13 +407,3 @@ drainOutQueue k = do
     l <- outboundQueueLength k
     if l == 0 then return ()
     else drainOutQueue k
-
-kafkaRespErr :: Errno -> KafkaError
-kafkaRespErr (Errno num) = KafkaResponseError $ rdKafkaErrno2err (fromIntegral num)
-
-throwOnError :: IO (Maybe String) -> IO ()
-throwOnError action = do
-    m <- action
-    case m of
-        Just e -> throw $ KafkaError e
-        Nothing -> return ()

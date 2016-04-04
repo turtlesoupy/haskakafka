@@ -86,6 +86,41 @@ Configuration options are set in the call to `withKafkaConsumer` and `withKafkaP
 the full list of supported options, see 
 [librdkafka's list](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
+# High Level Consumers
+High level consumers are supported by librdkafka starting from version 0.9.  
+High-level consumers is their abilities to handle more than one partition and even more than one topic. 
+Scalability and rebalancing are taken care of by librdkafka: once a new consumer in the same 
+consumer group is started the rebalance happens and all consumer share the load.
+
+This version of Haskakafka adds (experimental) support for high-level consumers, 
+here is how such a consumer can be used in code:
+
+```Haskell
+import           Haskakafka
+import           Haskakafka.Consumer
+
+runConsumerExample :: IO ()
+runConsumerExample = do
+    res <- runConsumer
+              (ConsumerGroupId "test_group")    -- group id is required
+              []                                -- extra kafka conf properties
+              (BrokersString "localhost:9092")  -- kafka brokers to connect to
+              [TopicName "^hl-test*"]           -- list of topics to consume, supporting regex
+              processMessages                   -- handler to consume messages
+    print $ show res
+    
+-- this function is used inside consumer 
+-- and it is responsible for polling and handling messages
+-- In this case I will do 10 polls and then return a success
+processMessages :: Kafka -> IO (Either KafkaError ())
+processMessages kafka = do
+    mapM_ (\_ -> do
+                   msg1 <- pollMessage kafka 1000
+                   print $ show msg1) [1..10]
+    return $ Right ()
+    
+```
+
 # Installation
 
 ## Installing librdkafka
