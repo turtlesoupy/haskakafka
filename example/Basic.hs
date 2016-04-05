@@ -48,7 +48,10 @@ producerExample brokerNames ourTopic partition showFn = do
     _ <- produceKeyedMessage topic keyMessage
 
     -- We can also use the batch API for better performance
-    _ <- produceMessageBatch topic KafkaUnassignedPartition [message, keyMessage]
+    let numMessages = 9
+    _ <- produceMessageBatch topic
+      KafkaUnassignedPartition
+      (replicate numMessages message)
 
     putStrLn "Done producing messages, here was our config: "
     dumpConfFromKafka kafka >>= \d -> putStrLn $ "Kafka config: " ++ (showFn d)
@@ -89,7 +92,7 @@ consumerExample brokerNames ourTopic partition showFn = do
         putStrLn $ "Woohoo, we got: " ++ (showFn msg)
 
     -- Be a little less noisy
-    setLogLevel kafka KafkaLogCrit
+    -- setLogLevel kafka KafkaLogCrit
 
 metadataExample :: String -> (forall a. Show a => a -> String) -> IO ()
 metadataExample brokerNames showFn = do
@@ -107,7 +110,7 @@ runExample Consumer b t p pp = consumerExample b t p pp
 runExample Producer b t p pp = producerExample b t p pp
 runExample List     b _ _ pp = metadataExample b pp
 runExample All      b t p pp = do
-  consumerExample b t p pp
+  -- consumerExample b t p pp
   producerExample b t p pp
   metadataExample b pp
 

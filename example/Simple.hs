@@ -31,7 +31,8 @@ main  = do
     _ <- produceKeyedMessage topic keyMessage
 
     -- We can also use the batch API for better performance
-    _ <- produceMessageBatch topic KafkaUnassignedPartition [message, keyMessage]
+    _ <- produceMessageBatch topic KafkaUnassignedPartition
+      (replicate 9 message)
 
     putStrLn "Done producing messages, here was our config: "
     dumpConfFromKafka kafka >>= \d -> putStrLn $ "Kafka config: " ++ (show d)

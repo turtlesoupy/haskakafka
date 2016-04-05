@@ -1,13 +1,13 @@
-# Haskakafka 
+# Haskakafka
 
-Kafka bindings for Haskell backed by the 
+Kafka bindings for Haskell backed by the
 [librdkafka C module](https://github.com/edenhill/librdkafka). It has been tested and fully
-supports Kafka 0.8.x using librdkafka 0.8.1 and higher on Linux and OS X. Haskakafka supports
-both producers and consumers with optional batch operations. 
+supports Kafka 0.9.0.1 using librdkafka 0.9.0.99 and higher on Linux and OS X. Haskakafka supports
+both producers and consumers with optional batch operations.
 
 Hackage: http://hackage.haskell.org/package/haskakafka
 
-# Usage 
+# Usage
 A quick walkthrough of producers and consumers:
 ```Haskell
 import Haskakafka
@@ -16,7 +16,7 @@ import qualified Data.ByteString.Char8 as C8
 
 example :: IO ()
 example = do
-  let 
+  let
       -- Optionally, we can configure certain parameters for Kafka
       kafkaConfig = [("socket.timeout.ms", "50000")]
       topicConfig = [("request.timeout.ms", "50000")]
@@ -25,10 +25,10 @@ example = do
       samplePayload = C8.pack "Hello world"
 
 
-  -- withKafkaProducer opens a producer connection and gives us 
+  -- withKafkaProducer opens a producer connection and gives us
   -- two objects for subsequent use.
-  withKafkaProducer kafkaConfig topicConfig 
-                    "localhost:9092" "test_topic" 
+  withKafkaProducer kafkaConfig topicConfig
+                    "localhost:9092" "test_topic"
                     $ \kafka topic -> do
 
     -- Produce a single unkeyed message to partition 0
@@ -49,7 +49,7 @@ example = do
 
   -- withKafkaConsumer opens a consumer connection and starts consuming
   let partition = 0
-  withKafkaConsumer kafkaConfig topicConfig 
+  withKafkaConsumer kafkaConfig topicConfig
                     "localhost:9092" "test_topic"
                     partition -- locked to a specific partition for each consumer
                     KafkaOffsetBeginning -- start reading from beginning (alternatively, use
@@ -58,14 +58,14 @@ example = do
     -- Consume a single message at a time
     let timeoutMs = 1000
     me <- consumeMessage topic partition timeoutMs
-    case me of 
+    case me of
       (Left err) -> putStrLn $ "Uh oh, an error! " ++ (show err)
       (Right m) -> putStrLn $ "Woo, payload was " ++ (C8.unpack $ messagePayload m)
 
     -- For better performance, consume in batches
     let maxMessages = 10
     mes <- consumeMessageBatch topic partition timeoutMs maxMessages
-    case mes of 
+    case mes of
       (Left err) -> putStrLn $ "Something went wrong in batch consume! " ++ (show err)
       (Right ms) -> putStrLn $ "Woohoo, we got " ++ (show $ length ms) ++ " messages"
 
@@ -76,23 +76,23 @@ example = do
   -- we can also fetch metadata about our Kafka infrastructure
   let timeoutMs = 1000
   emd <- fetchBrokerMetadata [] "localhost:9092" timeoutMs
-  case emd of 
+  case emd of
     (Left err) -> putStrLn $ "Uh oh, error time: " ++ (show err)
     (Right md) -> putStrLn $ "Kafka metadata: " ++ (show md)
 ```
 
 ## Configuration Options
 Configuration options are set in the call to `withKafkaConsumer` and `withKafkaProducer`. For
-the full list of supported options, see 
+the full list of supported options, see
 [librdkafka's list](https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md).
 
 # High Level Consumers
-High level consumers are supported by librdkafka starting from version 0.9.  
-High-level consumers is their abilities to handle more than one partition and even more than one topic. 
-Scalability and rebalancing are taken care of by librdkafka: once a new consumer in the same 
+High level consumers are supported by librdkafka starting from version 0.9.
+High-level consumers have the ability to handle more than one partition and even more than one topic.
+Scalability and rebalancing are taken care of by librdkafka: once a new consumer in the same
 consumer group is started the rebalance happens and all consumer share the load.
 
-This version of Haskakafka adds (experimental) support for high-level consumers, 
+This version of Haskakafka adds (experimental) support for high-level consumers,
 here is how such a consumer can be used in code:
 
 ```Haskell
@@ -108,8 +108,8 @@ runConsumerExample = do
               [TopicName "^hl-test*"]           -- list of topics to consume, supporting regex
               processMessages                   -- handler to consume messages
     print $ show res
-    
--- this function is used inside consumer 
+
+-- this function is used inside consumer
 -- and it is responsible for polling and handling messages
 -- In this case I will do 10 polls and then return a success
 processMessages :: Kafka -> IO (Either KafkaError ())
@@ -118,7 +118,7 @@ processMessages kafka = do
                    msg1 <- pollMessage kafka 1000
                    print $ show msg1) [1..10]
     return $ Right ()
-    
+
 ```
 
 # Installation
@@ -134,7 +134,7 @@ As such, we suggest you install from the source:
     ./configure
     make && sudo make install
 
-On OSX, the C++ bindings were failing for me. If this is the case, just install the C bindings alone. 
+On OSX, the C++ bindings were failing for me. If this is the case, just install the C bindings alone.
 
     cd librdkafka/src
     make && sudo make install
@@ -145,10 +145,10 @@ The full Kafka guide is at http://kafka.apache.org/documentation.html#quickstart
 
 ## Installing Haskakafka
 
-Since haskakafka uses `c2hs` to generate C bindings, you may need to 
+Since haskakafka uses `c2hs` to generate C bindings, you may need to
 explicitly install `c2hs` somewhere on your path (i.e. outside of a sandbox).
 To do so, run:
-    
+
     cabal install c2hs
 
 Afterwards installation should work, so go for
@@ -162,19 +162,36 @@ This uses the latest version of Haskakafka from [Hackage](http://hackage.haskell
 Haskakafka ships with a suite of integration tests to verify the library against
 a live Kafka instance. To get these setup you must have a broker running
 on `localhost:9092` (or overwrite the `HASKAKAFKA_TEST_BROKER` environment variable)
-with a `haskakafka_tests` topic created (or overwrite the `HASKAKAFKA_TEST_TOPIC` 
+with a `haskakafka_tests` topic created (or overwrite the `HASKAKAFKA_TEST_TOPIC`
 environment variable).
 
 To get a broker running, download a [Kafka distribution](http://kafka.apache.org/downloads.html)
 and untar it into a directory. From there, run zookeeper using
-  
+
     bin/zookeeper-server-start.sh config/zookeeper.properties
 
 and run kafka in a separate window using
-  
+
     bin/kafka-server-start.sh config/server.properties
 
 With both Kafka and Zookeeper running, you can run tests through cabal:
-  
+
     cabal install --only-dependencies --enable-tests
     cabal test --log=/dev/stdout
+
+# Running Examples
+
+    stack build
+    stack exec -- basic --help
+
+The following will produce 11 messages on partition 5 for topic `test_topic`:
+
+    stack exec -- basic -b "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092" -t test_topic -p 5 -P
+
+The following will consume 11 messages on partition 5 for topic `test_topic`:
+
+    stack exec -- basic -b "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092" -t test_topic -p 5 -C
+
+The following will print a list of all brokers and topics:
+
+    stack exec -- basic -b "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092" -L --pretty
