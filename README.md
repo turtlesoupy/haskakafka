@@ -139,7 +139,7 @@ If the C++ bindings fail for you, just install the C bindings alone.
     cd librdkafka/src
     make && sudo make install
 
-On Debian and OS X, this will install the shared and static libraries so `/usr/local/lib`. Depending on your environment, you may need to configure environment variables to ensure that your libraries can be found by the compiler. For example:
+On Debian and OS X, this will install the shared and static libraries to `/usr/local/lib`. Depending on your environment, you may need to configure environment variables to ensure that your libraries can be found by the compiler. For example:
 
     export LD_LIBRARY_PATH=/usr/local/lib
 
@@ -152,10 +152,6 @@ or
 The full Kafka guide is at http://kafka.apache.org/documentation.html#quickstart
 
 ## Installing Haskakafka
-
-It is recommended that you use stack.
-
-    stack build
 
 If you want to use cabal—since haskakafka uses `c2hs` to generate C bindings—you may need to
 explicitly install `c2hs` somewhere on your path (i.e. outside of a sandbox).
