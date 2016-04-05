@@ -1,7 +1,5 @@
 flags: {}
 packages:
 - '.'
-extra-deps:
-- either-unwrap-1.1    
-
-resolver: lts-3.3
+extra-deps: []
+resolver: nightly-2016-04-05

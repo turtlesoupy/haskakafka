@@ -1,9 +1,9 @@
 name:                haskakafka
-version:             1.0.0
+version:             1.1.0
 synopsis:            Kafka bindings for Haskell
 description:         Apache Kafka bindings backed by the librdkafka
-                     C library. This implies full consumer and producer 
-                     support for Kafka 0.8.x.
+                     C library. This implies full consumer and producer
+                     support for Kafka 0.9.x.
 homepage:            http://github.com/cosbynator/haskakafka
 license:             MIT
 license-file:        LICENSE
@@ -21,7 +21,7 @@ library
   Build-tools: c2hs
   build-depends:       base >=4.6 && < 5
                      , bytestring
-                     , containers 
+                     , containers
                      , temporary
                      , unix
   exposed-modules:
@@ -30,14 +30,40 @@ library
     Haskakafka.InternalRdKafkaEnum
     Haskakafka.InternalSetup
     Haskakafka.InternalTypes
-    Haskakafka.Example
-  other-modules: 
+    Haskakafka.ConsumerExample
+    Haskakafka.Consumer
+    Haskakafka.Consumer.Internal.Convert
+    Haskakafka.Consumer.Internal.Types
+    Haskakafka.InternalShared
+  other-modules:
   hs-source-dirs:      src
   default-language:    Haskell2010
-  ghc-options: -Wall 
+  ghc-options:         -Wall
   include-dirs:        /usr/local/include/librdkafka
-  extra-lib-dirs: /usr/local/lib
+  extra-lib-dirs:      /usr/local/lib
   extra-libraries:     rdkafka
+
+executable simple
+  main-is:              Simple.hs
+  hs-source-dirs:       example
+  ghc-options:          -Wall
+  default-language:     Haskell2010
+  build-depends:
+      base
+    , haskakafka
+    , bytestring
+
+executable basic
+  main-is:              Basic.hs
+  hs-source-dirs:       example
+  ghc-options:          -Wall
+  default-language:     Haskell2010
+  build-depends:
+      base
+    , haskakafka
+    , bytestring
+    , cmdargs
+    , pretty-show
 
 test-suite tests
   type: exitcode-stdio-1.0

@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables #-} 
+{-# LANGUAGE ScopedTypeVariables #-}
 module Main (main) where
 import Haskakafka
 import Haskakafka.InternalSetup
@@ -26,7 +26,7 @@ getAddressTopic cb = do
   cb b t
 
 sampleProduceMessages :: [KafkaProduceMessage]
-sampleProduceMessages = 
+sampleProduceMessages =
   [ (KafkaProduceMessage $ C8.pack "hello")
   , (KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "value"))
   , (KafkaProduceMessage $ C8.pack "goodbye")
@@ -42,7 +42,7 @@ shouldBeProduceConsume (KafkaProduceKeyedMessage pkey ppayload) m = do
   (Just pkey) `shouldBe` (messageKey m)
 
 primeEOF :: KafkaTopic -> IO ()
-primeEOF kt = consumeMessage kt 0 1000 >> return ()
+primeEOF kt = consumeMessage kt 0 kafkaDelay >> return ()
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -52,12 +52,12 @@ testmain = hspec $ do
 
   describe "Kafka Configuration" $ do
     it "should allow dumping" $ do
-      kConf <- newKafkaConf 
+      kConf <- newKafkaConf
       kvs <- dumpKafkaConf kConf
       (Map.size kvs) `shouldSatisfy` (>0)
 
     it "should change when set is called" $ do
-      kConf <- newKafkaConf 
+      kConf <- newKafkaConf
       setKafkaConfValue kConf "socket.timeout.ms" "50000"
       kvs <- dumpKafkaConf kConf
       (kvs Map.! "socket.timeout.ms") `shouldBe` "50000"
@@ -71,7 +71,7 @@ testmain = hspec $ do
       kConf <- newKafkaConf
       (setKafkaConfValue kConf "socket.timeout.ms" "monorail") `shouldThrow`
         (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
-  
+
   describe "Kafka topic configuration" $ do
     it "should allow dumping" $ do
       kConf <- newKafkaTopicConf
@@ -97,35 +97,37 @@ testmain = hspec $ do
   describe "Logging" $ do
     it "should allow setting of log level" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \kafka _ -> do
-        setLogLevel kafka KafkaLogDebug 
+        setLogLevel kafka KafkaLogDebug
 
   describe "Consume and produce cycle" $ do
+    it "should produce a single message" $ getAddressTopic $ \a t -> do
+      let message = KafkaProduceMessage (C8.pack "Hey, first test message!")
+      perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+        produceMessage producerTopic (KafkaSpecifiedPartition 0) message
+      perr `shouldBe`Nothing
+
     it "should be able to produce and consume a unkeyed message off of the broker" $ getAddressTopic $ \a t -> do
       let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
         primeEOF topic
-        perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do 
-                produceMessage producerTopic (KafkaSpecifiedPartition 0) message
-        perr `shouldBe` Nothing
-        
-        et <- consumeMessage topic 0 kafkaDelay
-        case et of 
-          Left err -> error $ show err
-          Right m -> message `shouldBeProduceConsume` m
-
-    it "should be able to produce and consume a keyed message" $ getAddressTopic $ \a t -> do
-      let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
-
-      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        primeEOF topic
         perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
-                  produceKeyedMessage producerTopic message
+                produceMessage producerTopic (KafkaSpecifiedPartition 0) message
         perr `shouldBe` Nothing
 
         et <- consumeMessage topic 0 kafkaDelay
         case et of
           Left err -> error $ show err
           Right m -> message `shouldBeProduceConsume` m
+
+    it "should be able to produce a keyed message" $
+      getAddressTopic $ \a t -> do
+      let message = KafkaProduceKeyedMessage
+            (C8.pack "key")
+            (C8.pack "monkey around")
+
+      perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+                  produceKeyedMessage producerTopic message
+      perr `shouldBe` Nothing
 
     it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
@@ -136,7 +138,7 @@ testmain = hspec $ do
 
         ets <- mapM (\_ -> consumeMessage topic 0 kafkaDelay) ([1..3] :: [Integer])
 
-        forM_ (zip sampleProduceMessages ets) $ \(pm, et) -> 
+        forM_ (zip sampleProduceMessages ets) $ \(pm, et) ->
           case (pm, et) of
             (_, Left err) -> error $ show err
             (pmessage, Right cm) -> pmessage `shouldBeProduceConsume` cm
@@ -148,8 +150,8 @@ testmain = hspec $ do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
-        et <- consumeMessageBatch topic 0 (5000) 3
-        case et of 
+        et <- consumeMessageBatch topic 0 kafkaDelay 3
+        case et of
           (Left err) -> error $ show err
           (Right oms) -> do
             (length oms) `shouldBe` 3
@@ -159,29 +161,35 @@ testmain = hspec $ do
     it "should not fail on batch consume when no messages are available #12" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
         primeEOF topic
-        et <- consumeMessageBatch topic 0 (5000) 3
-        case et of 
+        et <- consumeMessageBatch topic 0 kafkaDelay 3
+        case et of
           (Left err) -> error $ show err
           (Right oms) -> do
             (length oms) `shouldBe` 0
 
+    it "should return EOF on batch consume if necessary" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        et <- consumeMessageBatch topic 0 kafkaDelay 10
+        case et of
+          (Left err) -> print err
+          (Right _oms) -> error "should return EOF"
 
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
 checkForKafka = do
   a <- brokerAddress
   me <- fetchBrokerMetadata [] a 1000
-  return $ case me of 
+  return $ case me of
     (Left _) -> False
     (Right _) -> True
 
-main :: IO () 
-main = do 
+main :: IO ()
+main = do
   a <- brokerAddress
-  hasKafka <- checkForKafka 
+  hasKafka <- checkForKafka
   if hasKafka then testmain
   else error $ "\n\n\
     \*******************************************************************************\n\
-    \Haskakafka's tests require an operable Kafka broker running on " ++ a ++ "\n\
-    \please follow the guide in Readme.md to set this up                          \n\
+    \Haskakafka's tests require an operable Kafka broker running on " ++ a ++      "\n\
+    \please follow the guide in Readme.md to set this up                            \n\
     \*******************************************************************************\n"
