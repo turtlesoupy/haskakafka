@@ -167,7 +167,7 @@ data RdKafkaMetadataBrokerT = RdKafkaMetadataBrokerT
 
 instance Storable RdKafkaMetadataBrokerT where
   alignment _ = {#alignof rd_kafka_metadata_broker_t#}
-  sizeOf _ = 24
+  sizeOf _ = {#sizeof rd_kafka_metadata_broker_t#}
   peek p = RdKafkaMetadataBrokerT
     <$> liftM fromIntegral ({#get rd_kafka_metadata_broker_t->id #} p)
     <*> liftM id ({#get rd_kafka_metadata_broker_t->host #} p)
@@ -209,7 +209,7 @@ data RdKafkaMetadataTopicT = RdKafkaMetadataTopicT
 
 instance Storable RdKafkaMetadataTopicT where
   alignment _ = {#alignof rd_kafka_metadata_topic_t#}
-  sizeOf _ = 32
+  sizeOf _ = {#sizeof rd_kafka_metadata_topic_t#}
   peek p = RdKafkaMetadataTopicT
     <$> liftM id ({#get rd_kafka_metadata_topic_t->topic #} p)
     <*> liftM fromIntegral ({#get rd_kafka_metadata_topic_t->partition_cnt #} p)
