@@ -682,6 +682,9 @@ newRdKafkaTopicConfT = do
 foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
     rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
 
+foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
+    rdKafkaDestroy' :: Ptr RdKafkaT -> IO ()
+
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
     allocaBytes nErrorBytes $ \charPtr -> do

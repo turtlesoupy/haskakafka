@@ -305,9 +305,15 @@ fetchBrokerMetadata :: ConfigOverrides -- ^ connection overrides, see <https://g
                     -> Int -- timeout for the request, in milliseconds (10^3 per second)
                     -> IO (Either KafkaError KafkaMetadata) -- Left on error, Right with metadata on success
 fetchBrokerMetadata configOverrides brokerString timeout = do
-  kafka <- newKafka RdKafkaConsumer configOverrides
-  addBrokers kafka brokerString
-  getAllMetadata kafka timeout
+  bracket
+    (do
+      kafka <- newKafka RdKafkaConsumer configOverrides
+      addBrokers kafka brokerString
+      return kafka
+    )
+    (\kafka -> do
+      withForeignPtr (kafkaPtr kafka) (\realPtr -> rdKafkaDestroy' realPtr))
+    ((flip getAllMetadata) timeout)
 
 -- | Grabs all metadata from a given Kafka instance.
 getAllMetadata :: Kafka
