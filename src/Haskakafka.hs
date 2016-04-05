@@ -38,7 +38,7 @@ module Haskakafka
 
 , IT.KafkaLogLevel(..)
 , IT.KafkaError(..)
-, RDE.RdKafkaRespErrT
+, RDE.RdKafkaRespErrT(..)
 
 -- Pseudo-internal
 , addBrokers
