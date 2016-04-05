@@ -256,7 +256,9 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
       topic <- newKafkaTopic kafka tName topicConfigOverrides
       return (kafka, topic)
     )
-    (\(kafka, _) -> drainOutQueue kafka)
+    (\(kafka, _) -> do
+      drainOutQueue kafka
+      destroyKafka kafka)
     (\(k, t) -> cb k t)
 
 -- | Connects to Kafka broker in consumer mode for a specific partition,
@@ -281,7 +283,9 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
       startConsuming topic partition offset
       return (kafka, topic)
     )
-    (\(_, topic) -> stopConsuming topic partition)
+    (\(kafka, topic) -> do
+      stopConsuming topic partition
+      destroyKafka kafka)
     (\(k, t) -> cb k t)
 
 {-# INLINE copyMsgFlags  #-}
@@ -311,8 +315,7 @@ fetchBrokerMetadata configOverrides brokerString timeout = do
       addBrokers kafka brokerString
       return kafka
     )
-    (\kafka -> do
-      withForeignPtr (kafkaPtr kafka) (\realPtr -> rdKafkaDestroy' realPtr))
+    destroyKafka
     ((flip getAllMetadata) timeout)
 
 -- | Grabs all metadata from a given Kafka instance.

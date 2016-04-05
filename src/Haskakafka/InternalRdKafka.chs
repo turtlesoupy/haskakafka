@@ -679,11 +679,8 @@ newRdKafkaTopicConfT = do
     {enumToCInt `RdKafkaTypeT', `RdKafkaConfTPtr', id `CCharBufPointer', cIntConv `CSize'}
     -> `RdKafkaTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
-    rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
-
 foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
-    rdKafkaDestroy' :: Ptr RdKafkaT -> IO ()
+    rdKafkaDestroy :: Ptr RdKafkaT -> IO ()
 
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
@@ -693,7 +690,6 @@ newRdKafkaT kafkaType confPtr =
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
             else do
-                addForeignPtrFinalizer rdKafkaDestroy ret
                 return $ Right ret
 
 {#fun unsafe rd_kafka_brokers_add as ^
