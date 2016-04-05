@@ -42,7 +42,7 @@ shouldBeProduceConsume (KafkaProduceKeyedMessage pkey ppayload) m = do
   (Just pkey) `shouldBe` (messageKey m)
 
 primeEOF :: KafkaTopic -> IO ()
-primeEOF kt = consumeMessage kt 0 3000 >> return ()
+primeEOF kt = consumeMessage kt 0 kafkaDelay >> return ()
 
 testmain :: IO ()
 testmain = hspec $ do
@@ -119,21 +119,15 @@ testmain = hspec $ do
           Left err -> error $ show err
           Right m -> message `shouldBeProduceConsume` m
 
-    it "should be able to produce and consume a keyed message" $ getAddressTopic $ \a t -> do
+    it "should be able to produce a keyed message" $
+      getAddressTopic $ \a t -> do
       let message = KafkaProduceKeyedMessage
-          (C8.pack "key")
-          (C8.pack "monkey around")
+            (C8.pack "key")
+            (C8.pack "monkey around")
 
-      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        primeEOF topic
-        perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+      perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
                   produceKeyedMessage producerTopic message
-        perr `shouldBe` Nothing
-
-        et <- consumeMessage topic 0 kafkaDelay
-        case et of
-          Left err -> error $ show err
-          Right m -> message `shouldBeProduceConsume` m
+      perr `shouldBe` Nothing
 
     it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
