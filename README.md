@@ -134,10 +134,18 @@ As such, we suggest you install from the source:
     ./configure
     make && sudo make install
 
-On OSX, the C++ bindings were failing for me. If this is the case, just install the C bindings alone.
+If the C++ bindings fail for you, just install the C bindings alone.
 
     cd librdkafka/src
     make && sudo make install
+
+On Debian and OS X, this will install the shared and static libraries so `/usr/local/lib`. Depending on your environment, you may need to configure environment variables to ensure that your libraries can be found by the compiler. For example:
+
+    export LD_LIBRARY_PATH=/usr/local/lib
+
+or
+
+    export C_INCLUDE_PATH=/usr/include/librdkafka
 
 ## Installing Kafka
 
@@ -145,7 +153,11 @@ The full Kafka guide is at http://kafka.apache.org/documentation.html#quickstart
 
 ## Installing Haskakafka
 
-Since haskakafka uses `c2hs` to generate C bindings, you may need to
+It is recommended that you use stack.
+
+    stack build
+
+If you want to use cabal—since haskakafka uses `c2hs` to generate C bindings—you may need to
 explicitly install `c2hs` somewhere on your path (i.e. outside of a sandbox).
 To do so, run:
 
@@ -155,7 +167,7 @@ Afterwards installation should work, so go for
 
     cabal install haskakafka
 
-This uses the latest version of Haskakafka from [Hackage](http://hackage.haskell.org/package/haskakafka)
+This uses the latest version of Haskakafka from [Hackage](http://hackage.haskell.org/package/haskakafka).
 
 # Testing
 
@@ -174,19 +186,38 @@ and run kafka in a separate window using
 
     bin/kafka-server-start.sh config/server.properties
 
-With both Kafka and Zookeeper running, you can run tests through cabal:
+With both Kafka and Zookeeper running, you can run tests through stack:
+
+    stack test
+
+You can also run tests through cabal:
 
     cabal install --only-dependencies --enable-tests
     cabal test --log=/dev/stdout
-
-You can also run tests through stack:
-
-    stack test
 
 # Running Examples
 
     stack build
     stack exec -- basic --help
+
+```
+basic example [OPTIONS]
+  Fetch metadata, produce, and consume a message
+
+Common flags:
+  -b       --brokers=<brokers>  Comma separated list in format
+                                <hostname>:<port>,<hostname>:<port>
+  -t       --topic=<topic>      Topic to fetch / produce
+  -C       --consumer           Consumer mode
+  -P       --producer           Producer mode
+  -L       --list               Metadata list mode
+  -A       --all                Run producer, consumer, and metadata list
+  -p=<num>                      Partition (-1 for random partitioner when
+                                using producer)
+           --pretty             Pretty print output
+  -?       --help               Display help message
+  -V       --version            Print version information
+```
 
 The following will produce 11 messages on partition 5 for topic `test_topic`:
 
@@ -196,6 +227,6 @@ The following will consume 11 messages on partition 5 for topic `test_topic`:
 
     stack exec -- basic -b "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092" -t test_topic -p 5 -C
 
-The following will print a list of all brokers and topics:
+The following will pretty print a list of all brokers and topics:
 
     stack exec -- basic -b "broker1.example.com:9092,broker2.example.com:9092,broker3.example.com:9092" -L --pretty
