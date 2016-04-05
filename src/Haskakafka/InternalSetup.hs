@@ -31,6 +31,11 @@ destroyKafka kafka = do
 newKafkaTopic :: Kafka -> String -> ConfigOverrides -> IO KafkaTopic
 newKafkaTopic k tName overrides = (kafkaTopicConf overrides) >>= newKafkaTopicPtr k tName
 
+destroyKafkaTopic :: KafkaTopic -> IO ()
+destroyKafkaTopic (KafkaTopic topic _ _) =
+  withForeignPtr topic $ \realPtr ->
+    rdKafkaTopicDestroy realPtr
+
 newKafkaPtr :: RdKafkaTypeT -> KafkaConf -> IO Kafka
 newKafkaPtr kafkaType c@(KafkaConf confPtr) = do
     et <- newRdKafkaT kafkaType confPtr

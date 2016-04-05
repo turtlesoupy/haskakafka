@@ -150,7 +150,7 @@ testmain = hspec $ do
                   produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
         errs `shouldBe` []
 
-        et <- consumeMessageBatch topic 0 (5000) 3
+        et <- consumeMessageBatch topic 0 kafkaDelay 3
         case et of
           (Left err) -> error $ show err
           (Right oms) -> do
@@ -161,7 +161,7 @@ testmain = hspec $ do
     it "should not fail on batch consume when no messages are available #12" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
         primeEOF topic
-        et <- consumeMessageBatch topic 0 (5000) 3
+        et <- consumeMessageBatch topic 0 kafkaDelay 3
         case et of
           (Left err) -> error $ show err
           (Right oms) -> do
@@ -169,7 +169,7 @@ testmain = hspec $ do
 
     it "should return EOF on batch consume if necessary" $ getAddressTopic $ \a t -> do
       withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-        et <- consumeMessageBatch topic 0 (5000) 10
+        et <- consumeMessageBatch topic 0 kafkaDelay 10
         case et of
           (Left err) -> print err
           (Right _oms) -> error "should return EOF"

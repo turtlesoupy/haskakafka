@@ -256,8 +256,9 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
       topic <- newKafkaTopic kafka tName topicConfigOverrides
       return (kafka, topic)
     )
-    (\(kafka, _) -> do
+    (\(kafka, topic) -> do
       drainOutQueue kafka
+      destroyKafkaTopic topic
       destroyKafka kafka)
     (\(k, t) -> cb k t)
 
@@ -285,6 +286,7 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
     )
     (\(kafka, topic) -> do
       stopConsuming topic partition
+      destroyKafkaTopic topic
       destroyKafka kafka)
     (\(k, t) -> cb k t)
 

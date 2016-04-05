@@ -770,8 +770,8 @@ castMetadata ptr = castPtr ptr
 {#fun unsafe rd_kafka_topic_new as ^
     {`RdKafkaTPtr', `String', `RdKafkaTopicConfTPtr'} -> `RdKafkaTopicTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_destroy"
-    rdKafkaTopicDestroy :: FunPtr (Ptr RdKafkaTopicT -> IO ())
+foreign import ccall unsafe "rdkafka.h rd_kafka_topic_destroy"
+    rdKafkaTopicDestroy :: Ptr RdKafkaTopicT -> IO ()
 
 newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
 newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
@@ -780,7 +780,6 @@ newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
     withForeignPtr ret $ \realPtr ->
         if realPtr == nullPtr then kafkaErrnoString >>= return . Left
         else do
-            addForeignPtrFinalizer rdKafkaTopicDestroy ret
             return $ Right ret
 
 -- Marshall / Unmarshall
