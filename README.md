@@ -179,6 +179,10 @@ With both Kafka and Zookeeper running, you can run tests through cabal:
     cabal install --only-dependencies --enable-tests
     cabal test --log=/dev/stdout
 
+You can also run tests through stack:
+
+    stack test
+
 # Running Examples
 
     stack build
