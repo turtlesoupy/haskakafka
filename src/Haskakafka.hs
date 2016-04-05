@@ -8,6 +8,7 @@ module Haskakafka
 , produceKeyedMessage
 , produceMessageBatch
 , storeOffset
+, seekToOffset
 , getAllMetadata
 , getTopicMetadata
 
@@ -127,6 +128,18 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
       case lefts ms of
         [] -> return $ Right $ rights ms
         l  -> return $ Left $ head l
+
+seekToOffset :: KafkaTopic
+    -> Int -- ^ partition number
+    -> KafkaOffset -- ^ destination
+    -> Int -- ^ timeout in milliseconds
+    -> IO (Maybe KafkaError)
+seekToOffset (KafkaTopic ptr _ _) p ofs timeout = do
+  err <- rdKafkaSeek ptr (fromIntegral p)
+      (fromIntegral $ offsetToInt64 ofs) timeout
+  case err of
+    RdKafkaRespErrNoError -> return Nothing
+    e -> return $ Just $ KafkaResponseError e
 
 -- | Store a partition's offset in librdkafka's offset store. This function only needs to be called
 -- if auto.commit.enable is false. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>
