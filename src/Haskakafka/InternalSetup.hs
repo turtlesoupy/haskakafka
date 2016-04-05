@@ -1,20 +1,20 @@
 module Haskakafka.InternalSetup where
 
-import Haskakafka.InternalTypes
-import Haskakafka.InternalRdKafka
-import Haskakafka.InternalRdKafkaEnum
+import           Haskakafka.InternalRdKafka
+import           Haskakafka.InternalRdKafkaEnum
+import           Haskakafka.InternalTypes
 
-import Control.Exception
-import Control.Monad
-import Data.Map.Strict (Map)
-import Foreign
-import Foreign.C.String
-import System.IO
+import           Control.Exception
+import           Control.Monad
+import           Data.Map.Strict                (Map)
+import           Foreign
+import           Foreign.C.String
+import           System.IO
 
-import qualified Data.Map.Strict as Map
+import qualified Data.Map.Strict                as Map
 
 -- | Create kafka object with the given configuration. Most of the time
--- you will not need to use this function directly 
+-- you will not need to use this function directly
 -- (see 'withKafkaProducer' and 'withKafkaConsumer').
 newKafka :: RdKafkaTypeT -> ConfigOverrides -> IO Kafka
 newKafka kafkaType overrides = (kafkaConf overrides) >>= newKafkaPtr kafkaType
@@ -27,24 +27,24 @@ newKafkaTopic k tName overrides = (kafkaTopicConf overrides) >>= newKafkaTopicPt
 
 newKafkaPtr :: RdKafkaTypeT -> KafkaConf -> IO Kafka
 newKafkaPtr kafkaType c@(KafkaConf confPtr) = do
-    et <- newRdKafkaT kafkaType confPtr 
-    case et of 
+    et <- newRdKafkaT kafkaType confPtr
+    case et of
         Left e -> error e
         Right x -> return $ Kafka x c
 
 newKafkaTopicPtr :: Kafka -> String -> KafkaTopicConf -> IO (KafkaTopic)
 newKafkaTopicPtr k@(Kafka kPtr _) tName conf@(KafkaTopicConf confPtr) = do
     et <- newRdKafkaTopicT kPtr tName confPtr
-    case et of 
+    case et of
         Left e -> throw $ KafkaError e
         Right x -> return $ KafkaTopic x k conf
 
--- 
+--
 -- Misc.
 --
 -- | Sets library log level (noisiness) with respect to a kafka instance
 setLogLevel :: Kafka -> KafkaLogLevel -> IO ()
-setLogLevel (Kafka kptr _) level = 
+setLogLevel (Kafka kptr _) level =
   rdKafkaSetLogLevel kptr (fromEnum level)
 
 --
@@ -60,9 +60,9 @@ newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
 newKafkaConf :: IO KafkaConf
 newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
 
-kafkaConf :: ConfigOverrides -> IO (KafkaConf) 
-kafkaConf overrides = do 
-  conf <- newKafkaConf 
+kafkaConf :: ConfigOverrides -> IO (KafkaConf)
+kafkaConf overrides = do
+  conf <- newKafkaConf
   setAllKafkaConfValues conf overrides
   return conf
 
@@ -73,9 +73,9 @@ kafkaTopicConf overrides = do
   return conf
 
 checkConfSetValue :: RdKafkaConfResT -> CCharBufPointer -> IO ()
-checkConfSetValue err charPtr = case err of 
+checkConfSetValue err charPtr = case err of
     RdKafkaConfOk -> return ()
-    RdKafkaConfInvalid -> do 
+    RdKafkaConfInvalid -> do
       str <- peekCString charPtr
       throw $ KafkaInvalidConfigurationValue str
     RdKafkaConfUnknown -> do
@@ -83,7 +83,7 @@ checkConfSetValue err charPtr = case err of
       throw $ KafkaUnknownConfigurationKey str
 
 setKafkaConfValue :: KafkaConf -> String -> String -> IO ()
-setKafkaConfValue (KafkaConf confPtr) key value = do
+setKafkaConfValue (KafkaConf confPtr) key value =
   allocaBytes nErrorBytes $ \charPtr -> do
     err <- rdKafkaConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
     checkConfSetValue err charPtr
@@ -92,7 +92,7 @@ setAllKafkaConfValues :: KafkaConf -> ConfigOverrides -> IO ()
 setAllKafkaConfValues conf overrides = forM_ overrides $ \(k, v) -> setKafkaConfValue conf k v
 
 setKafkaTopicConfValue :: KafkaTopicConf -> String -> String -> IO ()
-setKafkaTopicConfValue (KafkaTopicConf confPtr) key value = do
+setKafkaTopicConfValue (KafkaTopicConf confPtr) key value =
   allocaBytes nErrorBytes $ \charPtr -> do
     err <- rdKafkaTopicConfSet confPtr key value charPtr (fromIntegral nErrorBytes)
     checkConfSetValue err charPtr
@@ -113,15 +113,15 @@ hPrintKafka :: Handle -> Kafka -> IO ()
 hPrintKafka h k = handleToCFile h "w" >>= \f -> rdKafkaDump f (kafkaPtr k)
 
 -- | Returns a map of the current kafka configuration
-dumpConfFromKafka :: Kafka -> IO (Map String String) 
+dumpConfFromKafka :: Kafka -> IO (Map String String)
 dumpConfFromKafka (Kafka _ cfg) = dumpKafkaConf cfg
 
--- | Returns a map of the current topic configuration 
+-- | Returns a map of the current topic configuration
 dumpConfFromKafkaTopic :: KafkaTopic -> IO (Map String String)
 dumpConfFromKafkaTopic (KafkaTopic _ _ conf) = dumpKafkaTopicConf conf
 
 dumpKafkaTopicConf :: KafkaTopicConf -> IO (Map String String)
-dumpKafkaTopicConf (KafkaTopicConf kptr) = 
+dumpKafkaTopicConf (KafkaTopicConf kptr) =
     parseDump (\sizeptr -> rdKafkaTopicConfDump kptr sizeptr)
 
 dumpKafkaConf :: KafkaConf -> IO (Map String String)
@@ -130,7 +130,7 @@ dumpKafkaConf (KafkaConf kptr) = do
 
 parseDump :: (CSizePtr -> IO (Ptr CString)) -> IO (Map String String)
 parseDump cstr = alloca $ \sizeptr -> do
-    strPtr <- cstr sizeptr 
+    strPtr <- cstr sizeptr
     size <- peek sizeptr
 
     keysAndValues <- mapM (\i -> peekCString =<< peekElemOff strPtr i) [0..((fromIntegral size) - 1)]

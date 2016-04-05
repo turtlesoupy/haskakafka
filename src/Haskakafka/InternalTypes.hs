@@ -2,41 +2,40 @@
 
 module Haskakafka.InternalTypes where
 
-import Control.Exception
-import Data.Int
-import Data.Typeable
+import           Control.Exception
+import           Data.Int
+import           Data.Typeable
 
-import Haskakafka.InternalRdKafka
-import Haskakafka.InternalRdKafkaEnum
+import           Haskakafka.InternalRdKafka
+import           Haskakafka.InternalRdKafkaEnum
 
-import qualified Data.ByteString as BS
+import qualified Data.ByteString                as BS
 
--- 
+--
 -- Pointer wrappers
 --
 
 -- | Kafka configuration object
-data KafkaConf = KafkaConf RdKafkaConfTPtr
+data KafkaConf = KafkaConf RdKafkaConfTPtr deriving (Show)
 
 -- | Kafka topic configuration object
 data KafkaTopicConf = KafkaTopicConf RdKafkaTopicConfTPtr
 
 
 -- | Main pointer to Kafka object, which contains our brokers
-data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr, _kafkaConf :: KafkaConf}
+data Kafka = Kafka { kafkaPtr :: RdKafkaTPtr, _kafkaConf :: KafkaConf} deriving (Show)
 
 -- | Main pointer to Kafka topic, which is what we consume from or produce to
-data KafkaTopic = KafkaTopic 
-    RdKafkaTopicTPtr  
-    Kafka -- Kept around to prevent garbage collection 
+data KafkaTopic = KafkaTopic
+    RdKafkaTopicTPtr
+    Kafka -- Kept around to prevent garbage collection
     KafkaTopicConf
-
 --
 -- Consumer
 --
 
 -- | Starting locations for a consumer
-data KafkaOffset = 
+data KafkaOffset =
   -- | Start reading from the beginning of the partition
     KafkaOffsetBeginning
 
@@ -46,23 +45,26 @@ data KafkaOffset =
   -- | Start reading from a specific location within the partition
   | KafkaOffset Int64
 
-  -- | Start reading from the stored offset. See 
-  -- <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md librdkafka's documentation> 
+  -- | Start reading from the stored offset. See
+  -- <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md librdkafka's documentation>
   -- for offset store configuration.
   | KafkaOffsetStored
+  | KafkaOffsetInvalid
+  deriving (Eq, Show)
 
 -- | Represents /received/ messages from a Kafka broker (i.e. used in a consumer)
-data KafkaMessage = 
-  KafkaMessage { 
-                 -- | Kafka partition this message was received from 
-                 messagePartition :: !Int 
+data KafkaMessage =
+  KafkaMessage {
+                  messageTopic     :: !String
+                 -- | Kafka partition this message was received from
+               ,  messagePartition :: !Int
                  -- | Offset within the 'messagePartition' Kafka partition
-               , messageOffset :: !Int64
+               , messageOffset     :: !Int64
                  -- | Contents of the message, as a 'ByteString'
-               , messagePayload :: !BS.ByteString
+               , messagePayload    :: !BS.ByteString
                  -- | Optional key of the message. 'Nothing' when the message
                  -- was enqueued without a key
-               , messageKey :: Maybe BS.ByteString
+               , messageKey        :: Maybe BS.ByteString
                }
   deriving (Eq, Show, Read, Typeable)
 
@@ -71,74 +73,74 @@ data KafkaMessage =
 --
 
 -- | Represents messages /to be enqueued/ onto a Kafka broker (i.e. used for a producer)
-data KafkaProduceMessage = 
+data KafkaProduceMessage =
     -- | A message without a key, assigned to 'KafkaSpecifiedPartition' or 'KafkaUnassignedPartition'
-    KafkaProduceMessage 
+    KafkaProduceMessage
       {-# UNPACK #-} !BS.ByteString -- message payload
 
     -- | A message with a key, assigned to a partition based on the key
-  | KafkaProduceKeyedMessage 
+  | KafkaProduceKeyedMessage
       {-# UNPACK #-} !BS.ByteString -- message key
       {-# UNPACK #-} !BS.ByteString -- message payload
   deriving (Eq, Show, Typeable)
 
 -- | Options for destination partition when enqueuing a message
-data KafkaProducePartition = 
-  -- | A specific partition in the topic 
+data KafkaProducePartition =
+  -- | A specific partition in the topic
     KafkaSpecifiedPartition {-# UNPACK #-} !Int  -- the partition number of the topic
 
   -- | A random partition within the topic
-  | KafkaUnassignedPartition  
+  | KafkaUnassignedPartition
 
 --
 -- Metadata
 --
 -- | Metadata for all Kafka brokers
 data KafkaMetadata = KafkaMetadata
-    { 
+    {
     -- | Broker metadata
-      brokers :: [KafkaBrokerMetadata] 
+      brokers :: [KafkaBrokerMetadata]
     -- | topic metadata
-    , topics :: [Either KafkaError KafkaTopicMetadata] 
-    } 
+    , topics  :: [Either KafkaError KafkaTopicMetadata]
+    }
   deriving (Eq, Show, Typeable)
 
 -- | Metadata for a specific Kafka broker
 data KafkaBrokerMetadata = KafkaBrokerMetadata
-    { 
+    {
     -- | broker identifier
-      brokerId :: Int 
+      brokerId   :: Int
     -- | hostname for the broker
-    , brokerHost :: String 
+    , brokerHost :: String
     -- | port for the broker
-    , brokerPort :: Int 
-    } 
+    , brokerPort :: Int
+    }
   deriving (Eq, Show, Typeable)
 
 -- | Metadata for a specific topic
 data KafkaTopicMetadata = KafkaTopicMetadata
-    { 
+    {
     -- | name of the topic
-      topicName :: String 
+      topicName       :: String
     -- | partition metadata
-    , topicPartitions :: [Either KafkaError KafkaPartitionMetadata] 
+    , topicPartitions :: [Either KafkaError KafkaPartitionMetadata]
     } deriving (Eq, Show, Typeable)
 
 -- | Metadata for a specific partition
 data KafkaPartitionMetadata = KafkaPartitionMetadata
-    { 
+    {
     -- | identifier for the partition
-      partitionId :: Int 
+      partitionId       :: Int
 
     -- | broker leading this partition
-    , partitionLeader :: Int 
+    , partitionLeader   :: Int
 
     -- | replicas of the leader
-    , partitionReplicas :: [Int]  
+    , partitionReplicas :: [Int]
 
     -- | In-sync replica set, see <http://kafka.apache.org/documentation.html>
-    , partitionIsrs :: [Int] 
-    } 
+    , partitionIsrs     :: [Int]
+    }
   deriving (Eq, Show, Typeable)
 
 --
@@ -146,7 +148,7 @@ data KafkaPartitionMetadata = KafkaPartitionMetadata
 --
 
 -- | Log levels for the RdKafkaLibrary used in 'setKafkaLogLevel'
-data KafkaLogLevel = 
+data KafkaLogLevel =
   KafkaLogEmerg | KafkaLogAlert | KafkaLogCrit | KafkaLogErr | KafkaLogWarning |
   KafkaLogNotice | KafkaLogInfo | KafkaLogDebug
 
@@ -171,7 +173,7 @@ instance Enum KafkaLogLevel where
    fromEnum KafkaLogDebug = 7
 
 -- | Any Kafka errors
-data KafkaError = 
+data KafkaError =
     KafkaError String
   | KafkaInvalidReturnValue
   | KafkaBadSpecification String
