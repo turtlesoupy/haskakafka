@@ -123,7 +123,8 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
               storable <- peek storablePtr
               ret <- fromMessageStorable storable
               fptr <- newForeignPtr_ storablePtr
-              addForeignPtrFinalizer rdKafkaMessageDestroy fptr
+              withForeignPtr fptr $ \realPtr ->
+                rdKafkaMessageDestroy realPtr
               if (err'RdKafkaMessageT storable) /= RdKafkaRespErrNoError then
                   return $ Left $ KafkaResponseError $ err'RdKafkaMessageT storable
               else
@@ -132,8 +133,6 @@ consumeMessageBatch (KafkaTopic topicPtr _ _) partition timeout maxMessages =
       case lefts ms of
         [] -> return $ Right $ rights ms
         l  -> return $ Left $ head l
-      --return $ Right ms
-
 
 -- | Store a partition's offset in librdkafka's offset store. This function only needs to be called
 -- if auto.commit.enable is false. See <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md>

@@ -92,7 +92,7 @@ consumerExample brokerNames ourTopic partition showFn = do
         putStrLn $ "Woohoo, we got: " ++ (showFn msg)
 
     -- Be a little less noisy
-    -- setLogLevel kafka KafkaLogCrit
+    setLogLevel kafka KafkaLogCrit
 
 metadataExample :: String -> (forall a. Show a => a -> String) -> IO ()
 metadataExample brokerNames showFn = do

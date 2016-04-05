@@ -102,80 +102,83 @@ testmain = hspec $ do
   describe "Consume and produce cycle" $ do
     it "should produce a single message" $ getAddressTopic $ \a t -> do
       let message = KafkaProduceMessage (C8.pack "Hey, first test message!")
-      withKafkaProducer [] [] a t $ \_ producerTopic -> do
+      perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
         produceMessage producerTopic (KafkaSpecifiedPartition 0) message
-        return ()
-    -- it "should be able to produce and consume a unkeyed message off of the broker" $ getAddressTopic $ \a t -> do
-    --   let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     primeEOF topic
-    --     perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
-    --             produceMessage producerTopic (KafkaSpecifiedPartition 0) message
-    --     perr `shouldBe` Nothing
+      perr `shouldBe`Nothing
 
-    --     et <- consumeMessage topic 0 kafkaDelay
-    --     case et of
-    --       Left err -> error $ show err
-    --       Right m -> message `shouldBeProduceConsume` m
+    it "should be able to produce and consume a unkeyed message off of the broker" $ getAddressTopic $ \a t -> do
+      let message = KafkaProduceMessage (C8.pack "hey hey we're the monkeys")
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+                produceMessage producerTopic (KafkaSpecifiedPartition 0) message
+        perr `shouldBe` Nothing
 
-    -- it "should be able to produce and consume a keyed message" $ getAddressTopic $ \a t -> do
-    --   let message = KafkaProduceKeyedMessage (C8.pack "key") (C8.pack "monkey around")
+        et <- consumeMessage topic 0 kafkaDelay
+        case et of
+          Left err -> error $ show err
+          Right m -> message `shouldBeProduceConsume` m
 
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     primeEOF topic
-    --     perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
-    --               produceKeyedMessage producerTopic message
-    --     perr `shouldBe` Nothing
+    it "should be able to produce and consume a keyed message" $ getAddressTopic $ \a t -> do
+      let message = KafkaProduceKeyedMessage
+          (C8.pack "key")
+          (C8.pack "monkey around")
 
-    --     et <- consumeMessage topic 0 kafkaDelay
-    --     case et of
-    --       Left err -> error $ show err
-    --       Right m -> message `shouldBeProduceConsume` m
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        perr <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+                  produceKeyedMessage producerTopic message
+        perr `shouldBe` Nothing
 
-    -- it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     primeEOF topic
-    --     errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
-    --               produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
-    --     errs `shouldBe` []
+        et <- consumeMessage topic 0 kafkaDelay
+        case et of
+          Left err -> error $ show err
+          Right m -> message `shouldBeProduceConsume` m
 
-    --     ets <- mapM (\_ -> consumeMessage topic 0 kafkaDelay) ([1..3] :: [Integer])
+    it "should be able to batch produce messages" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
+        errs `shouldBe` []
 
-    --     forM_ (zip sampleProduceMessages ets) $ \(pm, et) ->
-    --       case (pm, et) of
-    --         (_, Left err) -> error $ show err
-    --         (pmessage, Right cm) -> pmessage `shouldBeProduceConsume` cm
+        ets <- mapM (\_ -> consumeMessage topic 0 kafkaDelay) ([1..3] :: [Integer])
 
-    -- it "should be able to batch consume messages" $ getAddressTopic $ \a t -> do
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     primeEOF topic
-    --     errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
-    --               produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
-    --     errs `shouldBe` []
+        forM_ (zip sampleProduceMessages ets) $ \(pm, et) ->
+          case (pm, et) of
+            (_, Left err) -> error $ show err
+            (pmessage, Right cm) -> pmessage `shouldBeProduceConsume` cm
 
-    --     et <- consumeMessageBatch topic 0 (5000) 3
-    --     case et of
-    --       (Left err) -> error $ show err
-    --       (Right oms) -> do
-    --         (length oms) `shouldBe` 3
-    --         forM_ (zip sampleProduceMessages oms) $ \(pm, om) -> pm `shouldBeProduceConsume` om
+    it "should be able to batch consume messages" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        errs <- withKafkaProducer [] [] a t $ \_ producerTopic -> do
+                  produceMessageBatch producerTopic (KafkaSpecifiedPartition 0 ) sampleProduceMessages
+        errs `shouldBe` []
+
+        et <- consumeMessageBatch topic 0 (5000) 3
+        case et of
+          (Left err) -> error $ show err
+          (Right oms) -> do
+            (length oms) `shouldBe` 3
+            forM_ (zip sampleProduceMessages oms) $ \(pm, om) -> pm `shouldBeProduceConsume` om
 
     -- test for https://github.com/cosbynator/haskakafka/issues/12
-    -- it "should not fail on batch consume when no messages are available #12" $ getAddressTopic $ \a t -> do
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     primeEOF topic
-    --     et <- consumeMessageBatch topic 0 (5000) 3
-    --     case et of
-    --       (Left err) -> error $ show err
-    --       (Right oms) -> do
-    --         (length oms) `shouldBe` 0
+    it "should not fail on batch consume when no messages are available #12" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        primeEOF topic
+        et <- consumeMessageBatch topic 0 (5000) 3
+        case et of
+          (Left err) -> error $ show err
+          (Right oms) -> do
+            (length oms) `shouldBe` 0
 
-    -- it "should return EOF on batch consume if necessary" $ getAddressTopic $ \a t -> do
-    --   withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
-    --     et <- consumeMessageBatch topic 0 (5000) 10
-    --     case et of
-    --       (Left err) -> print err
-    --       (Right oms) -> error "should return EOF"
+    it "should return EOF on batch consume if necessary" $ getAddressTopic $ \a t -> do
+      withKafkaConsumer [] [] a t 0 KafkaOffsetEnd $ \_ topic -> do
+        et <- consumeMessageBatch topic 0 (5000) 10
+        case et of
+          (Left err) -> print err
+          (Right _oms) -> error "should return EOF"
 
 -- Test setup (error on no Kafka)
 checkForKafka :: IO (Bool)
@@ -190,7 +193,6 @@ main :: IO ()
 main = do
   a <- brokerAddress
   hasKafka <- checkForKafka
-  let hasKafka = True
   if hasKafka then testmain
   else error $ "\n\n\
     \*******************************************************************************\n\

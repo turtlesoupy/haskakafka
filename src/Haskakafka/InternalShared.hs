@@ -20,11 +20,12 @@ fromMessagePtr ptr =
     withForeignPtr ptr $ \realPtr ->
     if realPtr == nullPtr then liftM (Left . kafkaRespErr) getErrno
     else do
-        addForeignPtrFinalizer rdKafkaMessageDestroy ptr
         s <- peek realPtr
-        if err'RdKafkaMessageT s /= RdKafkaRespErrNoError
+        msg <- if err'RdKafkaMessageT s /= RdKafkaRespErrNoError
             then return $ Left . KafkaResponseError $ err'RdKafkaMessageT s
             else Right <$> fromMessageStorable s
+        rdKafkaMessageDestroy realPtr
+        return msg
 
 fromMessageStorable :: RdKafkaMessageT -> IO KafkaMessage
 fromMessageStorable s = do

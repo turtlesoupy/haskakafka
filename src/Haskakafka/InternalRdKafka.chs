@@ -620,8 +620,8 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_list_groups"
 -------------------------------------------------------------------------------------------------
 
 -- rd_kafka_message
-foreign import ccall unsafe "rdkafka.h &rd_kafka_message_destroy"
-    rdKafkaMessageDestroy :: FunPtr (Ptr RdKafkaMessageT -> IO ())
+foreign import ccall unsafe "rdkafka.h rd_kafka_message_destroy"
+    rdKafkaMessageDestroy :: Ptr RdKafkaMessageT -> IO ()
 
 -- rd_kafka_conf
 {#fun unsafe rd_kafka_conf_new as ^
