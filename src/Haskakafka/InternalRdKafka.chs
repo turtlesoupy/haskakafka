@@ -15,7 +15,7 @@ import System.IO
 import System.Posix.IO
 import System.Posix.Types
 
-#include "rdkafka.h"
+#include "librdkafka/rdkafka.h"
 
 type CInt64T = {#type int64_t #}
 type CInt32T = {#type int32_t #}
