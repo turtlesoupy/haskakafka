@@ -21,6 +21,8 @@ module Haskakafka
 , IS.setLogLevel
 , IS.hPrintSupportedKafkaConf
 , IS.hPrintKafka
+, IS.destroyKafka
+, IS.destroyKafkaTopic
 , rdKafkaVersionStr
 
 -- Type re-exports
