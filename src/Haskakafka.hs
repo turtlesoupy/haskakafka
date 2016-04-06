@@ -10,6 +10,8 @@ module Haskakafka
 , storeOffset
 , getAllMetadata
 , getTopicMetadata
+, withKafkaConf
+, withKafkaTopicConf
 
 -- Internal objects
 , IS.newKafka
@@ -290,6 +292,15 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
       destroyKafka kafka)
     (\(k, t) -> cb k t)
 
+withKafkaConf :: (KafkaConf -> IO a) -> IO a
+withKafkaConf =
+  bracket newKafkaConf destroyKafkaConf
+
+withKafkaTopicConf :: (KafkaTopicConf -> IO a) -> IO a
+withKafkaTopicConf =
+  bracket newKafkaTopicConf destroyKafkaTopicConf
+
+
 {-# INLINE copyMsgFlags  #-}
 copyMsgFlags :: Int
 copyMsgFlags = rdKafkaMsgFlagCopy
@@ -318,7 +329,7 @@ fetchBrokerMetadata configOverrides brokerString timeout = do
       return kafka
     )
     destroyKafka
-    ((flip getAllMetadata) timeout)
+    (\k -> getAllMetadata k timeout)
 
 -- | Grabs all metadata from a given Kafka instance.
 getAllMetadata :: Kafka

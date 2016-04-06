@@ -52,47 +52,48 @@ testmain = hspec $ do
 
   describe "Kafka Configuration" $ do
     it "should allow dumping" $ do
-      kConf <- newKafkaConf
-      kvs <- dumpKafkaConf kConf
-      (Map.size kvs) `shouldSatisfy` (>0)
+      withKafkaConf $ \kConf -> do
+        kvs <- dumpKafkaConf kConf
+        (Map.size kvs) `shouldSatisfy` (>0)
 
     it "should change when set is called" $ do
-      kConf <- newKafkaConf
-      setKafkaConfValue kConf "socket.timeout.ms" "50000"
-      kvs <- dumpKafkaConf kConf
-      (kvs Map.! "socket.timeout.ms") `shouldBe` "50000"
+      withKafkaConf $ \kConf -> do
+        setKafkaConfValue kConf "socket.timeout.ms" "50000"
+        kvs <- dumpKafkaConf kConf
+        (kvs Map.! "socket.timeout.ms") `shouldBe` "50000"
 
     it "should throw an exception on unknown property" $ do
-      kConf <- newKafkaConf
-      (setKafkaConfValue kConf "blippity.blop.cosby" "120") `shouldThrow`
-        (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
+      withKafkaConf $ \kConf -> do
+        (setKafkaConfValue kConf "blippity.blop.cosby" "120") `shouldThrow`
+          (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
 
     it "should throw an exception on an invalid value" $ do
-      kConf <- newKafkaConf
-      (setKafkaConfValue kConf "socket.timeout.ms" "monorail") `shouldThrow`
-        (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
+      withKafkaConf $ \kConf -> do
+        (setKafkaConfValue kConf "socket.timeout.ms" "monorail") `shouldThrow`
+          (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
   describe "Kafka topic configuration" $ do
     it "should allow dumping" $ do
-      kConf <- newKafkaTopicConf
-      kvs <- dumpKafkaTopicConf kConf
-      (Map.size kvs) `shouldSatisfy` (>0)
+      withKafkaTopicConf $ \kTopicConf -> do
+        kvs <- dumpKafkaTopicConf kTopicConf
+        (Map.size kvs) `shouldSatisfy` (>0)
 
     it "should change when set is called" $ do
-      kConf <- newKafkaTopicConf
-      setKafkaTopicConfValue kConf "request.timeout.ms" "20000"
-      kvs <- dumpKafkaTopicConf kConf
-      (kvs Map.! "request.timeout.ms") `shouldBe` "20000"
+      withKafkaTopicConf $ \kTopicConf -> do
+        setKafkaTopicConfValue kTopicConf "request.timeout.ms" "20000"
+        kvs <- dumpKafkaTopicConf kTopicConf
+        (kvs Map.! "request.timeout.ms") `shouldBe` "20000"
 
     it "should throw an exception on unknown property" $ do
-      kConf <- newKafkaTopicConf
-      (setKafkaTopicConfValue kConf "blippity.blop.cosby" "120") `shouldThrow`
-        (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
+      withKafkaTopicConf $ \kTopicConf -> do
+        (setKafkaTopicConfValue kTopicConf "blippity.blop.cosby" "120") `shouldThrow`
+          (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
 
     it "should throw an exception on an invalid value" $ do
-      kConf <- newKafkaTopicConf
-      (setKafkaTopicConfValue kConf "request.timeout.ms" "mono...doh!") `shouldThrow`
-        (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
+      withKafkaTopicConf $ \kTopicConf -> do
+        (setKafkaTopicConfValue kTopicConf "request.timeout.ms" "mono...doh!")
+          `shouldThrow`
+          (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
   describe "Logging" $ do
     it "should allow setting of log level" $ getAddressTopic $ \a t -> do

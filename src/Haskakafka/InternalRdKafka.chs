@@ -627,8 +627,8 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_message_destroy"
 {#fun unsafe rd_kafka_conf_new as ^
     {} -> `RdKafkaConfTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
-    rdKafkaConfDestroy :: FunPtr (Ptr RdKafkaConfT -> IO ())
+foreign import ccall unsafe "rdkafka.h rd_kafka_conf_destroy"
+    rdKafkaConfDestroy :: Ptr RdKafkaConfT -> IO ()
 
 {#fun unsafe rd_kafka_conf_dup as ^
     {`RdKafkaConfTPtr'} -> `RdKafkaConfTPtr' #}
@@ -640,7 +640,6 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
 newRdKafkaConfT :: IO RdKafkaConfTPtr
 newRdKafkaConfT = do
     ret <- rdKafkaConfNew
-    addForeignPtrFinalizer rdKafkaConfDestroy ret
     return ret
 
 {#fun unsafe rd_kafka_conf_dump as ^
@@ -658,8 +657,8 @@ newRdKafkaConfT = do
 {#fun unsafe rd_kafka_topic_conf_dup as ^
     {`RdKafkaTopicConfTPtr'} -> `RdKafkaTopicConfTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
-    rdKafkaTopicConfDestroy :: FunPtr (Ptr RdKafkaTopicConfT -> IO ())
+foreign import ccall unsafe "rdkafka.h rd_kafka_topic_conf_destroy"
+    rdKafkaTopicConfDestroy :: Ptr RdKafkaTopicConfT -> IO ()
 
 {#fun unsafe rd_kafka_topic_conf_set as ^
   {`RdKafkaTopicConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'}
@@ -668,7 +667,6 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
 newRdKafkaTopicConfT :: IO RdKafkaTopicConfTPtr
 newRdKafkaTopicConfT = do
     ret <- rdKafkaTopicConfNew
-    addForeignPtrFinalizer rdKafkaTopicConfDestroy ret
     return ret
 
 {#fun unsafe rd_kafka_topic_conf_dump as ^
@@ -689,8 +687,7 @@ newRdKafkaT kafkaType confPtr =
         ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
-            else do
-                return $ Right ret
+            else return $ Right ret
 
 {#fun unsafe rd_kafka_brokers_add as ^
     {`RdKafkaTPtr', `String'} -> `Int' #}

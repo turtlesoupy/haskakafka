@@ -68,8 +68,18 @@ type ConfigOverrides = [(String, String)]
 newKafkaTopicConf :: IO KafkaTopicConf
 newKafkaTopicConf = newRdKafkaTopicConfT >>= return . KafkaTopicConf
 
+destroyKafkaTopicConf :: KafkaTopicConf -> IO ()
+destroyKafkaTopicConf (KafkaTopicConf topicConf) =
+  withForeignPtr topicConf $ \realPtr ->
+    rdKafkaTopicConfDestroy realPtr
+
 newKafkaConf :: IO KafkaConf
 newKafkaConf = newRdKafkaConfT >>= return . KafkaConf
+
+destroyKafkaConf :: KafkaConf -> IO ()
+destroyKafkaConf (KafkaConf conf) =
+  withForeignPtr conf $ \realPtr ->
+    rdKafkaConfDestroy realPtr
 
 kafkaConf :: ConfigOverrides -> IO (KafkaConf)
 kafkaConf overrides = do
