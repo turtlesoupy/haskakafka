@@ -82,13 +82,7 @@ addBrokers (Kafka kptr _) brokerStr = do
 -- 'consumeMessage' won't work without it. This function is non-blocking.
 startConsuming :: KafkaTopic -> Int -> KafkaOffset -> IO ()
 startConsuming (KafkaTopic topicPtr _ _) partition offset =
-    let trueOffset = case offset of
-                        KafkaOffsetBeginning -> (- 2)
-                        KafkaOffsetEnd -> (- 1)
-                        KafkaOffsetStored -> (- 1000)
-                        KafkaOffsetInvalid -> (- 1001)
-                        KafkaOffset i -> i
-    in throwOnError $ rdKafkaConsumeStart topicPtr partition trueOffset
+    throwOnError $ rdKafkaConsumeStart topicPtr partition $ offsetToInt64 offset
 
 -- | Stops consuming for a given topic. You probably do not need to call
 -- this directly (it is called automatically when 'withKafkaConsumer' terminates).
