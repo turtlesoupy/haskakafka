@@ -12,6 +12,9 @@ module Haskakafka
 , getTopicMetadata
 , withKafkaConf
 , withKafkaTopicConf
+, handleProduceErr
+, producePartitionInteger
+, pollEvents
 
 -- Internal objects
 , IS.newKafka
@@ -26,8 +29,8 @@ module Haskakafka
 , rdKafkaVersionStr
 
 -- Type re-exports
-, IT.Kafka
-, IT.KafkaTopic
+, IT.Kafka(..)
+, IT.KafkaTopic(..)
 
 , IT.KafkaOffset(..)
 , IT.KafkaMessage(..)
