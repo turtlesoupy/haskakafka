@@ -49,6 +49,7 @@ data KafkaOffset =
   -- <https://github.com/edenhill/librdkafka/blob/master/CONFIGURATION.md librdkafka's documentation>
   -- for offset store configuration.
   | KafkaOffsetStored
+  | KafkaOffsetTail Int64
   | KafkaOffsetInvalid
   deriving (Eq, Show)
 

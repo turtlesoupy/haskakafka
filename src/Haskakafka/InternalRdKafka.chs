@@ -719,6 +719,10 @@ rdKafkaConsumeStart topicPtr partition offset = do
   {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Ptr (Ptr RdKafkaMessageT)', cIntConv `CSize'}
   -> `CSize' cIntConv #}
 
+{#fun rd_kafka_seek as ^
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T', `Int'}
+  -> `RdKafkaRespErrT' cIntToEnum #}
+
 rdKafkaConsumeStop :: RdKafkaTopicTPtr -> Int -> IO (Maybe String)
 rdKafkaConsumeStop topicPtr partition = do
     i <- rdKafkaConsumeStopInternal topicPtr (fromIntegral partition)
