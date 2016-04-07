@@ -15,6 +15,7 @@ module Haskakafka
 , handleProduceErr
 , producePartitionInteger
 , pollEvents
+, pollEventsSafe
 
 -- Internal objects
 , IS.newKafka
@@ -421,6 +422,12 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
 
 pollEvents :: Kafka -> Int -> IO ()
 pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
+
+pollEventsSafe :: Kafka -> Int -> IO ()
+pollEventsSafe (Kafka kPtr _) timeout = do
+  withForeignPtr kPtr $ \realPtr -> do
+    rdKafkaPollSafe realPtr timeout
+  return ()
 
 outboundQueueLength :: Kafka -> IO (Int)
 outboundQueueLength (Kafka kPtr _) = rdKafkaOutqLen kPtr

@@ -129,6 +129,7 @@ data RdKafkaMessageT = RdKafkaMessageT
     , offset'RdKafkaMessageT :: Int64
     , payload'RdKafkaMessageT :: Word8Ptr
     , key'RdKafkaMessageT :: Word8Ptr
+    , private'RdKafkaMessageT :: Ptr ()
     }
     deriving (Show, Eq)
 
@@ -144,6 +145,7 @@ instance Storable RdKafkaMessageT where
         <*> liftM fromIntegral  ({#get rd_kafka_message_t->offset #} p)
         <*> liftM castPtr       ({#get rd_kafka_message_t->payload #} p)
         <*> liftM castPtr       ({#get rd_kafka_message_t->key #} p)
+        <*> liftM castPtr       ({#get rd_kafka_message_t->_private #} p)
     poke p x = do
       {#set rd_kafka_message_t.err#}        p (enumToCInt   $ err'RdKafkaMessageT x)
       {#set rd_kafka_message_t.rkt#}        p (castPtr      $ topic'RdKafkaMessageT x)
@@ -153,6 +155,7 @@ instance Storable RdKafkaMessageT where
       {#set rd_kafka_message_t.offset#}     p (fromIntegral $ offset'RdKafkaMessageT x)
       {#set rd_kafka_message_t.payload#}    p (castPtr      $ payload'RdKafkaMessageT x)
       {#set rd_kafka_message_t.key#}        p (castPtr      $ key'RdKafkaMessageT x)
+      {#set rd_kafka_message_t._private#}   p (castPtr      $ private'RdKafkaMessageT x)
 
 {#pointer *rd_kafka_message_t as RdKafkaMessageTPtr foreign -> RdKafkaMessageT #}
 
@@ -750,7 +753,10 @@ castMetadata ptr = castPtr ptr
 {# fun unsafe rd_kafka_metadata_destroy as ^
    {castPtr `Ptr RdKafkaMetadataT'} -> `()' #}
 
-{#fun unsafe rd_kafka_poll as ^
+foreign import ccall safe "rd_kafka.h rd_kafka_poll"
+  rdKafkaPollSafe :: Ptr RdKafkaT -> Int -> IO Int
+
+{# fun unsafe rd_kafka_poll as ^
     {`RdKafkaTPtr', `Int'} -> `Int' #}
 
 {#fun unsafe rd_kafka_outq_len as ^
