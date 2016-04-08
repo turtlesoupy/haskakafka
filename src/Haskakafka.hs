@@ -231,6 +231,7 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                   , offset'RdKafkaMessageT = 0
                   , keyLen'RdKafkaMessageT = 0
                   , key'RdKafkaMessageT = nullPtr
+                  , private'RdKafkaMessageT = nullPtr
                   }
     produceMessageToMessage (KafkaProduceKeyedMessage kbs bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
@@ -251,6 +252,7 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                     , offset'RdKafkaMessageT = 0
                     , keyLen'RdKafkaMessageT = keyLength
                     , key'RdKafkaMessageT = passedKey
+                    , private'RdKafkaMessageT = nullPtr
                     }
 
 -- | Connects to Kafka broker in producer mode for a given topic, taking a function
@@ -432,7 +434,7 @@ pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
 
 pollEventsSafe :: Kafka -> Int -> IO ()
 pollEventsSafe (Kafka kPtr _) timeout = do
-  withForeignPtr kPtr $ \realPtr -> do
+  _ <- withForeignPtr kPtr $ \realPtr -> do
     rdKafkaPollSafe realPtr timeout
   return ()
 
