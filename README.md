@@ -139,13 +139,7 @@ If the C++ bindings fail for you, just install the C bindings alone.
     cd librdkafka/src
     make && sudo make install
 
-On Debian and OS X, this will install the shared and static libraries to `/usr/local/lib`. Depending on your environment, you may need to configure environment variables to ensure that your libraries can be found by the compiler. For example:
-
-    export LD_LIBRARY_PATH=/usr/local/lib
-
-or
-
-    export C_INCLUDE_PATH=/usr/include/librdkafka
+On Debian and OS X, this will install the shared and static libraries to `/usr/local/lib`.
 
 ## Installing Kafka
 

@@ -15,7 +15,7 @@ import System.IO
 import System.Posix.IO
 import System.Posix.Types
 
-#include "rdkafka.h"
+#include "librdkafka/rdkafka.h"
 
 type CInt64T = {#type int64_t #}
 type CInt32T = {#type int32_t #}
@@ -718,6 +718,10 @@ rdKafkaConsumeStart topicPtr partition offset = do
 {#fun rd_kafka_consume_batch as ^
   {`RdKafkaTopicTPtr', cIntConv `CInt32T', `Int', castPtr `Ptr (Ptr RdKafkaMessageT)', cIntConv `CSize'}
   -> `CSize' cIntConv #}
+
+{#fun rd_kafka_seek as ^
+  {`RdKafkaTopicTPtr', cIntConv `CInt32T', cIntConv `CInt64T', `Int'}
+  -> `RdKafkaRespErrT' cIntToEnum #}
 
 rdKafkaConsumeStop :: RdKafkaTopicTPtr -> Int -> IO (Maybe String)
 rdKafkaConsumeStop topicPtr partition = do

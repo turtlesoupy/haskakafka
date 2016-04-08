@@ -66,3 +66,22 @@ kafkaErrorToEither err = case err of
     _ -> Left err
 {-# INLINE kafkaErrorToEither #-}
 
+offsetToInt64 :: KafkaOffset -> Int64
+offsetToInt64 o = case o of
+    KafkaOffsetBeginning -> -2
+    KafkaOffsetEnd       -> -1
+    KafkaOffset off      -> off
+    KafkaOffsetStored    -> -1000
+    KafkaOffsetInvalid   -> -1001
+    KafkaOffsetTail i    -> -2000 - i
+{-# INLINE offsetToInt64 #-}
+
+int64ToOffset :: Int64 -> KafkaOffset
+int64ToOffset o
+    | o == -2    = KafkaOffsetBeginning
+    | o == -1    = KafkaOffsetEnd
+    | o == -1000 = KafkaOffsetStored
+    | o >= 0     = KafkaOffset o
+    | o <= -2000 = KafkaOffsetTail (-2000 - o)
+    | otherwise  = KafkaOffsetInvalid
+{-# INLINE int64ToOffset #-}
