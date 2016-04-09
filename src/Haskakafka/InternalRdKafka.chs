@@ -686,8 +686,7 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
     allocaBytes nErrorBytes $ \charPtr -> do
-        duper <- rdKafkaConfDup confPtr
-        ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
+        ret <- rdKafkaNew kafkaType confPtr charPtr (fromIntegral nErrorBytes)
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
             else return $ Right ret
@@ -782,8 +781,7 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_topic_destroy"
 
 newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
 newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
-    duper <- rdKafkaTopicConfDup topicConfPtr
-    ret <- rdKafkaTopicNew kafkaPtr topic duper
+    ret <- rdKafkaTopicNew kafkaPtr topic topicConfPtr
     withForeignPtr ret $ \realPtr ->
         if realPtr == nullPtr then kafkaErrnoString >>= return . Left
         else do
