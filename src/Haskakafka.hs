@@ -24,8 +24,6 @@ module Haskakafka
 , IS.setLogLevel
 , IS.hPrintSupportedKafkaConf
 , IS.hPrintKafka
-, IS.destroyKafka
-, IS.destroyKafkaTopic
 , rdKafkaVersionStr
 
 -- Type re-exports
@@ -271,10 +269,7 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
       topic <- newKafkaTopic kafka tName topicConfigOverrides
       return (kafka, topic)
     )
-    (\(kafka, topic) -> do
-      drainOutQueue kafka
-      destroyKafkaTopic topic
-      destroyKafka kafka)
+    (\(kafka, _) -> drainOutQueue kafka)
     (\(k, t) -> cb k t)
 
 -- | Connects to Kafka broker in consumer mode for a specific partition,
@@ -299,10 +294,7 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
       startConsuming topic partition offset
       return (kafka, topic)
     )
-    (\(kafka, topic) -> do
-      stopConsuming topic partition
-      destroyKafkaTopic topic
-      destroyKafka kafka)
+    (\(_, topic) -> stopConsuming topic partition)
     (\(k, t) -> cb k t)
 
 {-# INLINE copyMsgFlags  #-}
@@ -326,14 +318,9 @@ fetchBrokerMetadata :: ConfigOverrides -- ^ connection overrides, see <https://g
                     -> Int -- timeout for the request, in milliseconds (10^3 per second)
                     -> IO (Either KafkaError KafkaMetadata) -- Left on error, Right with metadata on success
 fetchBrokerMetadata configOverrides brokerString timeout = do
-  bracket
-    (do
-      kafka <- newKafka RdKafkaConsumer configOverrides
-      addBrokers kafka brokerString
-      return kafka
-    )
-    destroyKafka
-    (\k -> getAllMetadata k timeout)
+  kafka <- newKafka RdKafkaConsumer configOverrides
+  addBrokers kafka brokerString
+  getAllMetadata kafka timeout
 
 -- | Grabs all metadata from a given Kafka instance.
 getAllMetadata :: Kafka

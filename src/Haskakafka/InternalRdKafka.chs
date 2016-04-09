@@ -682,8 +682,8 @@ newRdKafkaTopicConfT = do
     {enumToCInt `RdKafkaTypeT', `RdKafkaConfTPtr', id `CCharBufPointer', cIntConv `CSize'}
     -> `RdKafkaTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
-    rdKafkaDestroy :: Ptr RdKafkaT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
+    rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
 
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
@@ -692,7 +692,9 @@ newRdKafkaT kafkaType confPtr =
         ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
-            else return $ Right ret
+            else do
+                addForeignPtrFinalizer rdKafkaDestroy ret
+                return $ Right ret
 
 {#fun unsafe rd_kafka_brokers_add as ^
     {`RdKafkaTPtr', `String'} -> `Int' #}
@@ -779,8 +781,8 @@ foreign import ccall safe "rd_kafka.h rd_kafka_poll"
 {#fun unsafe rd_kafka_topic_new as ^
     {`RdKafkaTPtr', `String', `RdKafkaTopicConfTPtr'} -> `RdKafkaTopicTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_topic_destroy"
-    rdKafkaTopicDestroy :: Ptr RdKafkaTopicT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_destroy"
+    rdKafkaTopicDestroy :: FunPtr (Ptr RdKafkaTopicT -> IO ())
 
 newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
 newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
@@ -789,6 +791,7 @@ newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
     withForeignPtr ret $ \realPtr ->
         if realPtr == nullPtr then kafkaErrnoString >>= return . Left
         else do
+            addForeignPtrFinalizer rdKafkaTopicDestroy ret
             return $ Right ret
 
 -- Marshall / Unmarshall
