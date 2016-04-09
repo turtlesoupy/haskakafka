@@ -19,22 +19,11 @@ import qualified Data.Map.Strict                as Map
 newKafka :: RdKafkaTypeT -> ConfigOverrides -> IO Kafka
 newKafka kafkaType overrides = (kafkaConf overrides) >>= newKafkaPtr kafkaType
 
--- | Destroy kafka object
-destroyKafka :: Kafka -> IO ()
-destroyKafka kafka = do
-  withForeignPtr (kafkaPtr kafka) $ \realPtr -> do
-    rdKafkaDestroy realPtr
-
 -- | Create a kafka topic object with the given configuration. Most of the
 -- time you will not need to use this function directly
 -- (see 'withKafkaProducer' and 'withKafkaConsumer')
 newKafkaTopic :: Kafka -> String -> ConfigOverrides -> IO KafkaTopic
 newKafkaTopic k tName overrides = (kafkaTopicConf overrides) >>= newKafkaTopicPtr k tName
-
-destroyKafkaTopic :: KafkaTopic -> IO ()
-destroyKafkaTopic (KafkaTopic topic _ _) =
-  withForeignPtr topic $ \realPtr ->
-    rdKafkaTopicDestroy realPtr
 
 newKafkaPtr :: RdKafkaTypeT -> KafkaConf -> IO Kafka
 newKafkaPtr kafkaType c@(KafkaConf confPtr) = do

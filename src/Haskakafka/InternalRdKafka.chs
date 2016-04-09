@@ -129,6 +129,7 @@ data RdKafkaMessageT = RdKafkaMessageT
     , offset'RdKafkaMessageT :: Int64
     , payload'RdKafkaMessageT :: Word8Ptr
     , key'RdKafkaMessageT :: Word8Ptr
+    , private'RdKafkaMessageT :: Ptr ()
     }
     deriving (Show, Eq)
 
@@ -144,6 +145,7 @@ instance Storable RdKafkaMessageT where
         <*> liftM fromIntegral  ({#get rd_kafka_message_t->offset #} p)
         <*> liftM castPtr       ({#get rd_kafka_message_t->payload #} p)
         <*> liftM castPtr       ({#get rd_kafka_message_t->key #} p)
+        <*> liftM castPtr       ({#get rd_kafka_message_t->_private #} p)
     poke p x = do
       {#set rd_kafka_message_t.err#}        p (enumToCInt   $ err'RdKafkaMessageT x)
       {#set rd_kafka_message_t.rkt#}        p (castPtr      $ topic'RdKafkaMessageT x)
@@ -153,6 +155,7 @@ instance Storable RdKafkaMessageT where
       {#set rd_kafka_message_t.offset#}     p (fromIntegral $ offset'RdKafkaMessageT x)
       {#set rd_kafka_message_t.payload#}    p (castPtr      $ payload'RdKafkaMessageT x)
       {#set rd_kafka_message_t.key#}        p (castPtr      $ key'RdKafkaMessageT x)
+      {#set rd_kafka_message_t._private#}   p (castPtr      $ private'RdKafkaMessageT x)
 
 {#pointer *rd_kafka_message_t as RdKafkaMessageTPtr foreign -> RdKafkaMessageT #}
 
@@ -679,8 +682,8 @@ newRdKafkaTopicConfT = do
     {enumToCInt `RdKafkaTypeT', `RdKafkaConfTPtr', id `CCharBufPointer', cIntConv `CSize'}
     -> `RdKafkaTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
-    rdKafkaDestroy :: Ptr RdKafkaT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_destroy"
+    rdKafkaDestroy :: FunPtr (Ptr RdKafkaT -> IO ())
 
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
@@ -690,6 +693,7 @@ newRdKafkaT kafkaType confPtr =
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
             else do
+                addForeignPtrFinalizer rdKafkaDestroy ret
                 return $ Right ret
 
 {#fun unsafe rd_kafka_brokers_add as ^
@@ -757,7 +761,10 @@ castMetadata ptr = castPtr ptr
 {# fun unsafe rd_kafka_metadata_destroy as ^
    {castPtr `Ptr RdKafkaMetadataT'} -> `()' #}
 
-{#fun unsafe rd_kafka_poll as ^
+foreign import ccall safe "rd_kafka.h rd_kafka_poll"
+  rdKafkaPollSafe :: Ptr RdKafkaT -> Int -> IO Int
+
+{# fun unsafe rd_kafka_poll as ^
     {`RdKafkaTPtr', `Int'} -> `Int' #}
 
 {#fun unsafe rd_kafka_outq_len as ^
@@ -774,8 +781,8 @@ castMetadata ptr = castPtr ptr
 {#fun unsafe rd_kafka_topic_new as ^
     {`RdKafkaTPtr', `String', `RdKafkaTopicConfTPtr'} -> `RdKafkaTopicTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_topic_destroy"
-    rdKafkaTopicDestroy :: Ptr RdKafkaTopicT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_destroy"
+    rdKafkaTopicDestroy :: FunPtr (Ptr RdKafkaTopicT -> IO ())
 
 newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
 newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
@@ -784,6 +791,7 @@ newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
     withForeignPtr ret $ \realPtr ->
         if realPtr == nullPtr then kafkaErrnoString >>= return . Left
         else do
+            addForeignPtrFinalizer rdKafkaTopicDestroy ret
             return $ Right ret
 
 -- Marshall / Unmarshall

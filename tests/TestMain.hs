@@ -74,24 +74,25 @@ testmain = hspec $ do
 
   describe "Kafka topic configuration" $ do
     it "should allow dumping" $ do
-      kConf <- newKafkaTopicConf
-      kvs <- dumpKafkaTopicConf kConf
+      kTopicConf <- newKafkaTopicConf
+      kvs <- dumpKafkaTopicConf kTopicConf
       (Map.size kvs) `shouldSatisfy` (>0)
 
     it "should change when set is called" $ do
-      kConf <- newKafkaTopicConf
-      setKafkaTopicConfValue kConf "request.timeout.ms" "20000"
-      kvs <- dumpKafkaTopicConf kConf
+      kTopicConf <- newKafkaTopicConf
+      setKafkaTopicConfValue kTopicConf "request.timeout.ms" "20000"
+      kvs <- dumpKafkaTopicConf kTopicConf
       (kvs Map.! "request.timeout.ms") `shouldBe` "20000"
 
     it "should throw an exception on unknown property" $ do
-      kConf <- newKafkaTopicConf
-      (setKafkaTopicConfValue kConf "blippity.blop.cosby" "120") `shouldThrow`
+      kTopicConf <- newKafkaTopicConf
+      (setKafkaTopicConfValue kTopicConf "blippity.blop.cosby" "120") `shouldThrow`
         (\(KafkaUnknownConfigurationKey str) -> (length str) > 0)
 
     it "should throw an exception on an invalid value" $ do
-      kConf <- newKafkaTopicConf
-      (setKafkaTopicConfValue kConf "request.timeout.ms" "mono...doh!") `shouldThrow`
+      kTopicConf <- newKafkaTopicConf
+      (setKafkaTopicConfValue kTopicConf "request.timeout.ms" "mono...doh!")
+        `shouldThrow`
         (\(KafkaInvalidConfigurationValue str) -> (length str) > 0)
 
   describe "Logging" $ do

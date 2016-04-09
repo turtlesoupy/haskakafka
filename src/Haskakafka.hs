@@ -11,6 +11,10 @@ module Haskakafka
 , seekToOffset
 , getAllMetadata
 , getTopicMetadata
+, handleProduceErr
+, producePartitionInteger
+, pollEvents
+, pollEventsSafe
 
 -- Internal objects
 , IS.newKafka
@@ -23,8 +27,8 @@ module Haskakafka
 , rdKafkaVersionStr
 
 -- Type re-exports
-, IT.Kafka
-, IT.KafkaTopic
+, IT.Kafka(..)
+, IT.KafkaTopic(..)
 
 , IT.KafkaOffset(..)
 , IT.KafkaMessage(..)
@@ -223,6 +227,7 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                   , offset'RdKafkaMessageT = 0
                   , keyLen'RdKafkaMessageT = 0
                   , key'RdKafkaMessageT = nullPtr
+                  , private'RdKafkaMessageT = nullPtr
                   }
     produceMessageToMessage (KafkaProduceKeyedMessage kbs bs) =  do
         let (payloadFPtr, payloadOffset, payloadLength) = BSI.toForeignPtr bs
@@ -243,6 +248,7 @@ produceMessageBatch (KafkaTopic topicPtr _ _) partition pms = do
                     , offset'RdKafkaMessageT = 0
                     , keyLen'RdKafkaMessageT = keyLength
                     , key'RdKafkaMessageT = passedKey
+                    , private'RdKafkaMessageT = nullPtr
                     }
 
 -- | Connects to Kafka broker in producer mode for a given topic, taking a function
@@ -263,10 +269,7 @@ withKafkaProducer configOverrides topicConfigOverrides brokerString tName cb =
       topic <- newKafkaTopic kafka tName topicConfigOverrides
       return (kafka, topic)
     )
-    (\(kafka, topic) -> do
-      drainOutQueue kafka
-      destroyKafkaTopic topic
-      destroyKafka kafka)
+    (\(kafka, _) -> drainOutQueue kafka)
     (\(k, t) -> cb k t)
 
 -- | Connects to Kafka broker in consumer mode for a specific partition,
@@ -291,10 +294,7 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
       startConsuming topic partition offset
       return (kafka, topic)
     )
-    (\(kafka, topic) -> do
-      stopConsuming topic partition
-      destroyKafkaTopic topic
-      destroyKafka kafka)
+    (\(_, topic) -> stopConsuming topic partition)
     (\(k, t) -> cb k t)
 
 {-# INLINE copyMsgFlags  #-}
@@ -318,14 +318,9 @@ fetchBrokerMetadata :: ConfigOverrides -- ^ connection overrides, see <https://g
                     -> Int -- timeout for the request, in milliseconds (10^3 per second)
                     -> IO (Either KafkaError KafkaMetadata) -- Left on error, Right with metadata on success
 fetchBrokerMetadata configOverrides brokerString timeout = do
-  bracket
-    (do
-      kafka <- newKafka RdKafkaConsumer configOverrides
-      addBrokers kafka brokerString
-      return kafka
-    )
-    destroyKafka
-    ((flip getAllMetadata) timeout)
+  kafka <- newKafka RdKafkaConsumer configOverrides
+  addBrokers kafka brokerString
+  getAllMetadata kafka timeout
 
 -- | Grabs all metadata from a given Kafka instance.
 getAllMetadata :: Kafka
@@ -412,6 +407,12 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
 
 pollEvents :: Kafka -> Int -> IO ()
 pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
+
+pollEventsSafe :: Kafka -> Int -> IO ()
+pollEventsSafe (Kafka kPtr _) timeout = do
+  _ <- withForeignPtr kPtr $ \realPtr -> do
+    rdKafkaPollSafe realPtr timeout
+  return ()
 
 outboundQueueLength :: Kafka -> IO (Int)
 outboundQueueLength (Kafka kPtr _) = rdKafkaOutqLen kPtr

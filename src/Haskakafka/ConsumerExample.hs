@@ -5,7 +5,7 @@ where
 import           Control.Arrow                  ((&&&))
 import           Haskakafka
 import           Haskakafka.Consumer
-import           Haskakafka.InternalRdKafkaEnum
+import           Haskakafka.InternalRdKafkaEnum ()
 
 iterator :: [Integer]
 iterator = [0 .. 20]
