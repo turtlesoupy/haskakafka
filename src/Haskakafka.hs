@@ -11,8 +11,6 @@ module Haskakafka
 , seekToOffset
 , getAllMetadata
 , getTopicMetadata
-, withKafkaConf
-, withKafkaTopicConf
 , handleProduceErr
 , producePartitionInteger
 , pollEvents
@@ -306,15 +304,6 @@ withKafkaConsumer configOverrides topicConfigOverrides brokerString tName partit
       destroyKafkaTopic topic
       destroyKafka kafka)
     (\(k, t) -> cb k t)
-
-withKafkaConf :: (KafkaConf -> IO a) -> IO a
-withKafkaConf =
-  bracket newKafkaConf destroyKafkaConf
-
-withKafkaTopicConf :: (KafkaTopicConf -> IO a) -> IO a
-withKafkaTopicConf =
-  bracket newKafkaTopicConf destroyKafkaTopicConf
-
 
 {-# INLINE copyMsgFlags  #-}
 copyMsgFlags :: Int

@@ -630,8 +630,8 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_message_destroy"
 {#fun unsafe rd_kafka_conf_new as ^
     {} -> `RdKafkaConfTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_conf_destroy"
-    rdKafkaConfDestroy :: Ptr RdKafkaConfT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_conf_destroy"
+    rdKafkaConfDestroy :: FunPtr (Ptr RdKafkaConfT -> IO ())
 
 {#fun unsafe rd_kafka_conf_dup as ^
     {`RdKafkaConfTPtr'} -> `RdKafkaConfTPtr' #}
@@ -643,6 +643,7 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_conf_destroy"
 newRdKafkaConfT :: IO RdKafkaConfTPtr
 newRdKafkaConfT = do
     ret <- rdKafkaConfNew
+    addForeignPtrFinalizer rdKafkaConfDestroy ret
     return ret
 
 {#fun unsafe rd_kafka_conf_dump as ^
@@ -660,8 +661,8 @@ newRdKafkaConfT = do
 {#fun unsafe rd_kafka_topic_conf_dup as ^
     {`RdKafkaTopicConfTPtr'} -> `RdKafkaTopicConfTPtr' #}
 
-foreign import ccall unsafe "rdkafka.h rd_kafka_topic_conf_destroy"
-    rdKafkaTopicConfDestroy :: Ptr RdKafkaTopicConfT -> IO ()
+foreign import ccall unsafe "rdkafka.h &rd_kafka_topic_conf_destroy"
+    rdKafkaTopicConfDestroy :: FunPtr (Ptr RdKafkaTopicConfT -> IO ())
 
 {#fun unsafe rd_kafka_topic_conf_set as ^
   {`RdKafkaTopicConfTPtr', `String', `String', id `CCharBufPointer', cIntConv `CSize'}
@@ -670,6 +671,7 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_topic_conf_destroy"
 newRdKafkaTopicConfT :: IO RdKafkaTopicConfTPtr
 newRdKafkaTopicConfT = do
     ret <- rdKafkaTopicConfNew
+    addForeignPtrFinalizer rdKafkaTopicConfDestroy ret
     return ret
 
 {#fun unsafe rd_kafka_topic_conf_dump as ^
@@ -686,7 +688,8 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_destroy"
 newRdKafkaT :: RdKafkaTypeT -> RdKafkaConfTPtr -> IO (Either String RdKafkaTPtr)
 newRdKafkaT kafkaType confPtr =
     allocaBytes nErrorBytes $ \charPtr -> do
-        ret <- rdKafkaNew kafkaType confPtr charPtr (fromIntegral nErrorBytes)
+        duper <- rdKafkaConfDup confPtr
+        ret <- rdKafkaNew kafkaType duper charPtr (fromIntegral nErrorBytes)
         withForeignPtr ret $ \realPtr -> do
             if realPtr == nullPtr then peekCString charPtr >>= return . Left
             else return $ Right ret
@@ -781,7 +784,8 @@ foreign import ccall unsafe "rdkafka.h rd_kafka_topic_destroy"
 
 newRdKafkaTopicT :: RdKafkaTPtr -> String -> RdKafkaTopicConfTPtr -> IO (Either String RdKafkaTopicTPtr)
 newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
-    ret <- rdKafkaTopicNew kafkaPtr topic topicConfPtr
+    duper <- rdKafkaTopicConfDup topicConfPtr
+    ret <- rdKafkaTopicNew kafkaPtr topic duper
     withForeignPtr ret $ \realPtr ->
         if realPtr == nullPtr then kafkaErrnoString >>= return . Left
         else do
