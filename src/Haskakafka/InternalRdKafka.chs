@@ -17,6 +17,8 @@ import System.Posix.Types
 
 #include "librdkafka/rdkafka.h"
 
+{#import Haskakafka.InternalRdKafkaEnum#}
+
 type CInt64T = {#type int64_t #}
 type CInt32T = {#type int32_t #}
 
@@ -517,8 +519,12 @@ newRdKafkaQueue k = do
     {`RdKafkaTPtr', `RdKafkaMessageTPtr', `Int'}
     -> `RdKafkaRespErrT' cIntToEnum #}
 
-{#fun unsafe rd_kafka_position as ^
+{#fun unsafe rd_kafka_committed as ^
     {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr', `Int'}
+    -> `RdKafkaRespErrT' cIntToEnum #}
+
+{#fun unsafe rd_kafka_position as ^
+    {`RdKafkaTPtr', `RdKafkaTopicPartitionListTPtr'}
     -> `RdKafkaRespErrT' cIntToEnum #}
 -------------------------------------------------------------------------------------------------
 ---- Groups
@@ -625,6 +631,9 @@ foreign import ccall unsafe "rdkafka.h &rd_kafka_list_groups"
 -- rd_kafka_message
 foreign import ccall unsafe "rdkafka.h rd_kafka_message_destroy"
     rdKafkaMessageDestroy :: Ptr RdKafkaMessageT -> IO ()
+
+{#fun unsafe rd_kafka_message_timestamp as ^
+    {`RdKafkaMessageTPtr', `RdKafkaTimestampTypeTPtr'} -> `CInt64T' cIntConv #}
 
 -- rd_kafka_conf
 {#fun unsafe rd_kafka_conf_new as ^
