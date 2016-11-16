@@ -15,6 +15,7 @@ module Haskakafka
 , producePartitionInteger
 , pollEvents
 , pollEventsSafe
+, queryWatermarkOffsets
 
 -- Internal objects
 , IS.newKafka
@@ -404,6 +405,30 @@ getMetadata (Kafka kPtr _) mTopic timeout = alloca $ \mdDblPtr -> do
               (map fromIntegral replicas)
               (map fromIntegral isrs)
           e -> return $ Left $ KafkaResponseError e
+
+-- | Get the current watermarks for a given topic
+queryWatermarkOffsets
+   :: Kafka   -- ^
+   -> String  -- ^ topic
+   -> Int     -- ^ partition
+   -> Int     -- ^ timeout in milliseconds (10^3 per second)
+   -> IO (Either String (Int64,Int64))
+queryWatermarkOffsets (Kafka kafkaPtr _) topic partition timeout = do
+   let
+      partition' = fromIntegral partition
+      timeout' = fromIntegral timeout
+   allocaBytesAligned 8 8 $ \lo ->
+     allocaBytesAligned 8 8 $ \hi ->
+        withCString topic $ \topic' -> do
+
+         ret <- rdKafkaQueryWatermarkOffsetsInternal kafkaPtr topic' partition' lo hi timeout'
+         if ret == RdKafkaRespErrNoError
+         then do
+             retLo <- peek lo
+             retHi <- peek hi
+             return $ Right (fromIntegral retLo,fromIntegral retHi)
+         else
+             return . Left $ rdKafkaErr2str ret
 
 pollEvents :: Kafka -> Int -> IO ()
 pollEvents (Kafka kPtr _) timeout = rdKafkaPoll kPtr timeout >> return ()
