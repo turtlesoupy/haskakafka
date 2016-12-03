@@ -26,8 +26,8 @@ library
                      , unix
   exposed-modules:
     Haskakafka
-    Haskakafka.InternalRdKafka
     Haskakafka.InternalRdKafkaEnum
+    Haskakafka.InternalRdKafka
     Haskakafka.InternalSetup
     Haskakafka.InternalTypes
     Haskakafka.ConsumerExample
