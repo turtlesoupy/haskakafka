@@ -803,6 +803,15 @@ newRdKafkaTopicT kafkaPtr topic topicConfPtr = do
             addForeignPtrFinalizer rdKafkaTopicDestroy ret
             return $ Right ret
 
+{#fun unsafe rd_kafka_query_watermark_offsets as rdKafkaQueryWatermarkOffsetsInternal
+   { `RdKafkaTPtr'
+   , id `CCharBufPointer'
+   , cIntConv `CInt32T'
+   , id `Ptr CLong'
+   , id `Ptr CLong'
+   ,`Int'}
+   -> `RdKafkaRespErrT' cIntToEnum #}
+
 -- Marshall / Unmarshall
 enumToCInt :: Enum a => a -> CInt
 enumToCInt = fromIntegral . fromEnum
