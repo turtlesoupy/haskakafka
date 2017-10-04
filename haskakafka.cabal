@@ -13,6 +13,10 @@ category:            Network
 build-type:          Simple
 cabal-version:       >=1.10
 
+flag examples
+  default: False
+  manual: True
+
 source-repository head
   type:     git
   location: git://github.com/cosbynator/haskakafka.git
@@ -44,6 +48,8 @@ library
       cpp-options: -D__attribute__(A)= -D_Nullable= -D_Nonnull=
 
 executable simple
+  if !flag(examples)
+    buildable: False
   main-is:              Simple.hs
   hs-source-dirs:       example
   ghc-options:          -Wall
@@ -54,6 +60,8 @@ executable simple
     , bytestring
 
 executable basic
+  if !flag(examples)
+    buildable: False
   main-is:              Basic.hs
   hs-source-dirs:       example
   ghc-options:          -Wall
